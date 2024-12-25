@@ -10,14 +10,12 @@ Future<void> addMood(String mood) async {
     final conn = await Connection.open(Endpoint(
       host: 'ep-yellow-truth-a5ebo559.us-east-2.aws.neon.tech',
       database: 'voyagersdb',
-      username: 'alexlucas03',
+      username: 'voyageruser',
       password: 'Sk3l3ton!sk3l3ton',
     ));
     await conn.execute(
-      'INSERT INTO moods (mood) VALUES (@mood)',
-      parameters: {
-        '@mood': mood,
-      },
+      r'INSERT INTO moods VALUES ($1)',
+      parameters: [mood],
     );
   } catch (e) {
     print('Error: ${e.toString()}');
@@ -40,10 +38,6 @@ class MyApp extends StatelessWidget {
             color: Colors.white, // White text in AppBar
             fontWeight: FontWeight.bold,
           ),
-        ),
-        textTheme: const TextTheme(
-          bodyText1: TextStyle(color: Colors.white), // White text globally
-          bodyText2: TextStyle(color: Colors.white), // White text globally
         ),
         buttonTheme: const ButtonThemeData(
           buttonColor: Color(0xFF3A4C7A), // Darkest blue for buttons
@@ -190,10 +184,10 @@ class _MoodStatsState extends State<MoodStats> {
               controller: _moodController,
               decoration: const InputDecoration(
                 labelText: 'Enter your mood',
-                labelStyle: TextStyle(color: Colors.white),
+                labelStyle: TextStyle(color: Colors.black),
                 border: OutlineInputBorder(),
               ),
-              style: const TextStyle(color: Colors.white),
+              style: const TextStyle(color: Colors.black),
             ),
             const SizedBox(height: 16),
             ElevatedButton(
@@ -203,7 +197,7 @@ class _MoodStatsState extends State<MoodStats> {
             const SizedBox(height: 16),
             Text(
               _statusMessage,
-              style: const TextStyle(color: Colors.white),
+              style: const TextStyle(color: Colors.black),
             ),
           ],
         ),
