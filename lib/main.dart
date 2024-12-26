@@ -1,25 +1,13 @@
 import 'package:flutter/material.dart';
-import 'package:postgres/postgres.dart';
+import 'database_helper.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart'; // Import the ffi library
+// Import the sqflite package
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  databaseFactory = databaseFactoryFfi;
+  await DatabaseHelper.instance.initDb();
   runApp(const MyApp());
-}
-
-Future<void> addMood(String mood) async {
-  try {
-    final conn = await Connection.open(Endpoint(
-      host: 'ep-yellow-truth-a5ebo559.us-east-2.aws.neon.tech',
-      database: 'voyagersdb',
-      username: 'voyageruser',
-      password: 'Sk3l3ton!sk3l3ton',
-    ));
-    await conn.execute(
-      r'INSERT INTO moods VALUES ($1)',
-      parameters: [mood],
-    );
-  } catch (e) {
-    print('Error: ${e.toString()}');
-  }
 }
 
 class MyApp extends StatelessWidget {
@@ -44,8 +32,7 @@ class MyApp extends StatelessWidget {
         ),
         elevatedButtonTheme: ElevatedButtonThemeData(
           style: ElevatedButton.styleFrom(
-            primary: const Color(0xFF3A4C7A), // Darkest blue for Elevated buttons
-            onPrimary: Colors.white, // White text on buttons
+            backgroundColor: const Color(0xFF3A4C7A), // Darkest blue for Elevated buttons
           ),
         ),
       ),
@@ -144,29 +131,63 @@ class MoodStats extends StatefulWidget {
 }
 
 class _MoodStatsState extends State<MoodStats> {
-  final TextEditingController _moodController = TextEditingController();
+  double _rating = 5.0;  // Default rating is 5, which could represent a neutral mood.
   String _statusMessage = '';
+  List<int> _moods = []; // List to store all mood ratings
 
+  // Method to submit a mood to the database
   void _submitMood() async {
-    String mood = _moodController.text.trim();
-    if (mood.isEmpty) {
-      setState(() {
-        _statusMessage = 'Please enter a mood.';
-      });
-      return;
-    }
-
+    // Convert the rating to an integer (if necessary)
+    int rating = _rating.toInt();
     setState(() {
       _statusMessage = 'Submitting mood...';
     });
 
-    await addMood(mood);
+    // Add the mood to the database
+    await DatabaseHelper.instance.addMood(rating);
+
+    // After submitting, reload the list of moods
+    _loadMoods();
 
     setState(() {
       _statusMessage = 'Mood submitted successfully!';
     });
+  }
 
-    _moodController.clear();
+  // Method to load all moods from the database
+  void _loadMoods() async {
+    List<Map<String, dynamic>> moodsFromDb = await DatabaseHelper.instance.queryAllMoods();
+
+    // Extract the ratings from the query results
+    List<int> moodsList = moodsFromDb.map((mood) => mood['rating'] as int).toList();
+
+    setState(() {
+      _moods = moodsList; // Update the moods list with the fetched data
+    });
+  }
+
+  // Method to clear all moods from the database
+  void _clearMoods() async {
+    setState(() {
+      _statusMessage = 'Clearing moods...';
+    });
+
+    // Clear all moods from the database
+    await DatabaseHelper.instance.clearDb();
+
+    // Reload the moods list after clearing
+    _loadMoods();
+
+    setState(() {
+      _statusMessage = 'All moods cleared!';
+    });
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    // Load moods from the database when the widget is first created
+    _loadMoods();
   }
 
   @override
@@ -180,14 +201,25 @@ class _MoodStatsState extends State<MoodStats> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            TextField(
-              controller: _moodController,
-              decoration: const InputDecoration(
-                labelText: 'Enter your mood',
-                labelStyle: TextStyle(color: Colors.black),
-                border: OutlineInputBorder(),
+            // Vertical Slider for Mood Rating
+            RotatedBox(
+              quarterTurns: 3,
+              child: Slider(
+                value: _rating,
+                min: 0,
+                max: 10,
+                divisions: 10,
+                onChanged: (double newValue) {
+                  setState(() {
+                    _rating = newValue;
+                  });
+                },
               ),
-              style: const TextStyle(color: Colors.black),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Mood Rating: ${_rating.toStringAsFixed(1)}',
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 16),
             ElevatedButton(
@@ -198,6 +230,27 @@ class _MoodStatsState extends State<MoodStats> {
             Text(
               _statusMessage,
               style: const TextStyle(color: Colors.black),
+            ),
+            const SizedBox(height: 16),
+            
+            // Display the submitted moods separated by commas
+            if (_moods.isNotEmpty)
+              Text(
+                'Submitted Moods: ${_moods.join(', ')}',
+                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+              ),
+            if (_moods.isEmpty)
+              const Text(
+                'No moods submitted yet.',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+              ),
+            
+            const SizedBox(height: 16),
+
+            // Clear Moods button
+            ElevatedButton(
+              onPressed: _clearMoods,
+              child: const Text('Clear All Moods'),
             ),
           ],
         ),
