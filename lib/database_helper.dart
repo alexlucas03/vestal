@@ -3,12 +3,11 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:sqflite/sqflite.dart';
 import 'mood.dart';
-import 'dart:io'; // For platform-specific paths
+import 'dart:io';
 
 class DatabaseHelper {
   static final DatabaseHelper instance = DatabaseHelper._instance();
   static Database? _database;
-
   DatabaseHelper._instance();
 
   Future<Database> get db async {
@@ -18,53 +17,117 @@ class DatabaseHelper {
 
   // Initialize the database
   Future<Database> initDb() async {
-    // Get the correct database path based on platform
     String databasesPath;
-    
     if (Platform.isAndroid || Platform.isIOS) {
-      // For mobile platforms (Android/iOS), use path_provider to get the directory
       final directory = await getApplicationDocumentsDirectory();
       databasesPath = directory.path;
     } else {
-      // For desktop platforms (Windows, Mac, Linux), use the current working directory
       databasesPath = Directory.current.path;
     }
 
-    // Create the full path for the database
     String path = join(databasesPath, 'moodsdata.db');
 
-    // Initialize the SQLite database using sqflite_common_ffi
-    return await openDatabase(path, version: 1, onCreate: _onCreate);
+    // Open database with onUpgrade callback
+    return await openDatabase(
+      path,
+      version: 2,
+      onCreate: _onCreate,
+      onUpgrade: _onUpgrade,
+    );
   }
 
   Future _onCreate(Database db, int version) async {
+    await _createMoodsTable(db);
+  }
+
+  Future _onUpgrade(Database db, int oldVersion, int newVersion) async {
+    // Handle database upgrades here
+    await _createMoodsTable(db);
+  }
+
+  // Separate method for creating the moods table
+  Future _createMoodsTable(Database db) async {
     await db.execute('''
-      CREATE TABLE moods (
-        rating INTEGER PRIMARY KEY
+      CREATE TABLE IF NOT EXISTS moods (
+        rating INTEGER,
+        date STRING PRIMARY KEY
       )
     ''');
   }
 
-  // Modified addMood method to take an int rating, convert it to a Mood object, and insert it
-  Future<int> addMood(int rating) async {
-    Database db = await instance.db;
-    
-    // Convert the integer rating to a Mood object
-    Mood mood = Mood(rating: rating);
-    
-    // Insert the mood into the database
+  Future<int> addMood(int rating, String date) async {
+  Database db = await instance.db;
+
+  // Check if a mood entry for the given date already exists
+  List<Map<String, dynamic>> existingMoods = await db.query(
+    'moods',
+    where: 'date = ?',
+    whereArgs: [date],
+  );
+
+  if (existingMoods.isNotEmpty) {
+    // Update the existing mood entry with the new rating
+    int date = existingMoods.first['date']; 
+    return await db.update(
+      'moods',
+      {'rating': rating},
+      where: 'date = ?',
+      whereArgs: [date],
+    );
+  } else {
+    // Insert a new mood entry
+    Mood mood = Mood(rating: rating, date: date);
     return await db.insert('moods', mood.toMap());
   }
+}
 
   Future<List<Map<String, dynamic>>> queryAllMoods() async {
     Database db = await instance.db;
     return await db.query('moods');
   }
-  
+
   Future<int> clearDb() async {
-  Database db = await instance.db;
+    Database db = await instance.db;
+    return await db.delete('moods');
+  }
+
+  Future<void> deleteAndRecreateTable() async {
+    Database db = await instance.db;
+    await db.execute('DROP TABLE IF EXISTS moods');
+    await _createMoodsTable(db);
+  }
+
+  // Close the database
+  Future<void> close() async {
+    if (_database != null) {
+      await _database!.close();
+      _database = null;
+    }
+  }
   
-  // Deletes all rows from the moods table
-  return await db.delete('moods');
-}
+  Future<List<Map<String, dynamic>>> queryMoodsByDate(String date) async {
+    Database db = await instance.db;
+
+    // Query moods by date
+    List<Map<String, dynamic>> moods = await db.query(
+      'moods',
+      where: 'date = ?',
+      whereArgs: [date],
+    );
+
+    return moods;
+  }
+
+  Future<bool> hasMoodForToday(String date) async {
+    final db = await instance.db;
+
+    // Query the database for the given date
+    final result = await db.query(
+      'moods',
+      where: 'date = ?',
+      whereArgs: [date],
+    );
+
+    return result.isNotEmpty; // Returns true if there's a record for today
+  }
 }

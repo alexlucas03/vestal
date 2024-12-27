@@ -1,17 +1,26 @@
 import 'package:flutter/material.dart';
 import 'database_helper.dart';
-import 'package:sqflite_common_ffi/sqflite_ffi.dart'; // Import the ffi library
-// Import the sqflite package
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'package:intl/intl.dart';
+import 'moodlinechart.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   databaseFactory = databaseFactoryFfi;
   await DatabaseHelper.instance.initDb();
-  runApp(const MyApp());
+
+  // Check if a mood has been submitted for today
+  String formattedDate = DateFormat('yyyyMMdd').format(DateTime.now());
+  bool isMoodSubmittedToday = await DatabaseHelper.instance.hasMoodForToday(formattedDate);
+
+  // Set the home page based on whether a mood has been submitted today
+  runApp(MyApp(isMoodSubmittedToday: isMoodSubmittedToday));
 }
 
 class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+  const MyApp({super.key, required this.isMoodSubmittedToday});
+
+  final bool isMoodSubmittedToday;
 
   @override
   Widget build(BuildContext context) {
@@ -27,19 +36,14 @@ class MyApp extends StatelessWidget {
             fontWeight: FontWeight.bold,
           ),
         ),
-        buttonTheme: const ButtonThemeData(
-          buttonColor: Color(0xFF3A4C7A), // Darkest blue for buttons
-        ),
-        elevatedButtonTheme: ElevatedButtonThemeData(
-          style: ElevatedButton.styleFrom(
-            backgroundColor: const Color(0xFF3A4C7A), // Darkest blue for Elevated buttons
-          ),
-        ),
       ),
-      home: const MyHomePage(title: 'Voyagers'),
+      home: isMoodSubmittedToday 
+          ? const MyHomePage(title: 'Voyagers') 
+          : const MoodSliderPage(fromPage: 'None'),
     );
   }
 }
+
 
 Widget _buildSection(BuildContext context, String title, Widget page) {
   return GestureDetector(
@@ -131,62 +135,39 @@ class MoodStats extends StatefulWidget {
 }
 
 class _MoodStatsState extends State<MoodStats> {
-  double _rating = 5.0;  // Default rating is 5, which could represent a neutral mood.
-  String _statusMessage = '';
-  List<int> _moods = []; // List to store all mood ratings
+  List<Map<String, dynamic>> _moods = [];
+  String formattedDate = DateFormat('yyyyMMdd').format(DateTime.now());
+  bool isMoodSubmittedToday = false;
 
-  // Method to submit a mood to the database
-  void _submitMood() async {
-    // Convert the rating to an integer (if necessary)
-    int rating = _rating.toInt();
-    setState(() {
-      _statusMessage = 'Submitting mood...';
-    });
+  @override
+  void initState() {
+    super.initState();
+    _checkMoodForToday();
+  }
 
-    // Add the mood to the database
-    await DatabaseHelper.instance.addMood(rating);
-
-    // After submitting, reload the list of moods
-    _loadMoods();
+  void _checkMoodForToday() async {
+    List<Map<String, dynamic>> moodsFromDb = await DatabaseHelper.instance.queryMoodsByDate(formattedDate);
 
     setState(() {
-      _statusMessage = 'Mood submitted successfully!';
+      isMoodSubmittedToday = moodsFromDb.isNotEmpty;
+      _moods = moodsFromDb;
     });
   }
 
   // Method to load all moods from the database
   void _loadMoods() async {
     List<Map<String, dynamic>> moodsFromDb = await DatabaseHelper.instance.queryAllMoods();
-
-    // Extract the ratings from the query results
-    List<int> moodsList = moodsFromDb.map((mood) => mood['rating'] as int).toList();
-
     setState(() {
-      _moods = moodsList; // Update the moods list with the fetched data
+      _moods = moodsFromDb; // Store the complete map with both rating and date
     });
   }
 
-  // Method to clear all moods from the database
   void _clearMoods() async {
-    setState(() {
-      _statusMessage = 'Clearing moods...';
-    });
 
     // Clear all moods from the database
     await DatabaseHelper.instance.clearDb();
 
     // Reload the moods list after clearing
-    _loadMoods();
-
-    setState(() {
-      _statusMessage = 'All moods cleared!';
-    });
-  }
-
-  @override
-  void initState() {
-    super.initState();
-    // Load moods from the database when the widget is first created
     _loadMoods();
   }
 
@@ -201,7 +182,91 @@ class _MoodStatsState extends State<MoodStats> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            // Vertical Slider for Mood Rating
+            isMoodSubmittedToday
+                ? Column(
+                    children: [
+                      MoodLineChart(moodData: _moods),
+                      const SizedBox(height: 16),
+                      ElevatedButton(
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (context) => MoodSliderPage(fromPage: 'MoodStats'),),
+                          );
+                        },
+                        child: const Text('Rate Your Mood'),
+                      ),
+                      ElevatedButton(
+                        onPressed: _clearMoods,
+                        child: const Text('Clear All Moods'),
+                      ),
+                    ],
+                  )
+                : Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Text(
+                        'No mood recorded today.',
+                        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                      ),
+                    ],
+                  ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class MoodSliderPage extends StatefulWidget {
+  final String fromPage;  // Added parameter to track the origin page
+
+  const MoodSliderPage({super.key, required this.fromPage});
+
+  @override
+  _MoodSliderPageState createState() => _MoodSliderPageState();
+}
+
+class _MoodSliderPageState extends State<MoodSliderPage> {
+  double _rating = 5.0;
+  String _statusMessage = '';
+  String formattedDate = DateFormat('yyyyMMdd').format(DateTime.now());
+
+  void _submitMood() async {
+    int rating = _rating.toInt();
+    setState(() {
+      _statusMessage = 'Submitting mood...';
+    });
+
+    // Add the mood to the database
+    await DatabaseHelper.instance.addMood(rating, formattedDate);
+
+    // Navigate back to the correct page based on 'fromPage' parameter
+    if (widget.fromPage == 'MoodStats') {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => const MoodStats()),
+      );
+    } else {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => const MyHomePage(title: 'Voyagers')),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Mood Slider'),
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
             RotatedBox(
               quarterTurns: 3,
               child: Slider(
@@ -230,27 +295,6 @@ class _MoodStatsState extends State<MoodStats> {
             Text(
               _statusMessage,
               style: const TextStyle(color: Colors.black),
-            ),
-            const SizedBox(height: 16),
-            
-            // Display the submitted moods separated by commas
-            if (_moods.isNotEmpty)
-              Text(
-                'Submitted Moods: ${_moods.join(', ')}',
-                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
-              ),
-            if (_moods.isEmpty)
-              const Text(
-                'No moods submitted yet.',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
-              ),
-            
-            const SizedBox(height: 16),
-
-            // Clear Moods button
-            ElevatedButton(
-              onPressed: _clearMoods,
-              child: const Text('Clear All Moods'),
             ),
           ],
         ),
