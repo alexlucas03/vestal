@@ -255,6 +255,22 @@ class _MoodSliderPageState extends State<MoodSliderPage> {
     }
   }
 
+  void _noMood() async {
+
+    // Navigate back to the correct page based on 'fromPage' parameter
+    if (widget.fromPage == 'MoodStats') {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => const MoodStats()),
+      );
+    } else {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => const MyHomePage(title: 'Voyagers')),
+      );
+    }
+  }
+
   // Function to determine active track color based on slider value
   Color _getTrackColor(double rating) {
     if (rating >= 8) {
@@ -356,9 +372,9 @@ class _MoodSliderPageState extends State<MoodSliderPage> {
               child: const Text('Submit Mood'),
             ),
             const SizedBox(height: 16),
-            Text(
-              _statusMessage,
-              style: const TextStyle(color: Colors.black),
+            ElevatedButton(
+              onPressed: _noMood,
+              child: const Text('No mood'),
             ),
           ],
         ),
