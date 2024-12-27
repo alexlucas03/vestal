@@ -44,7 +44,6 @@ class MyApp extends StatelessWidget {
   }
 }
 
-
 Widget _buildSection(BuildContext context, String title, Widget page) {
   return GestureDetector(
     onTap: () {
@@ -220,7 +219,7 @@ class _MoodStatsState extends State<MoodStats> {
 }
 
 class MoodSliderPage extends StatefulWidget {
-  final String fromPage;  // Added parameter to track the origin page
+  final String fromPage; // Added parameter to track the origin page
 
   const MoodSliderPage({super.key, required this.fromPage});
 
@@ -256,34 +255,99 @@ class _MoodSliderPageState extends State<MoodSliderPage> {
     }
   }
 
+  // Function to determine active track color based on slider value
+  Color _getTrackColor(double rating) {
+    if (rating >= 8) {
+      return Colors.green; // Green for 8-10
+    } else if (rating >= 6) {
+      return Colors.yellow; // Yellow for 6-8
+    } else if (rating >= 3) {
+      return Colors.orange; // Blue for 3-5
+    } else {
+      return Colors.red; // Red for 0-2
+    }
+  }
+
+  String _getRatingReaction(double rating) {
+  if (rating == 0) {
+    return 'Absolutely terrible! 😭';
+  } else if (rating == 1) {
+    return 'Very bad! 😞';
+  } else if (rating == 2) {
+    return 'Not good at all. 😔';
+  } else if (rating == 3) {
+    return 'Could be better. 😟';
+  } else if (rating == 4) {
+    return 'Somewhat disappointing. 😕';
+  } else if (rating == 5) {
+    return 'It’s okay. 😐';
+  } else if (rating == 6) {
+    return 'Not bad, but not great. 🙂';
+  } else if (rating == 7) {
+    return 'Pretty good! 😌';
+  } else if (rating == 8) {
+    return 'Very good! 😊';
+  } else if (rating == 9) {
+    return 'Excellent! 😍';
+  } else if (rating == 10) {
+    return 'Perfect! 😁';
+  } else {
+    return 'Unknown rating'; // Default case
+  }
+}
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Mood Slider'),
-      ),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            RotatedBox(
-              quarterTurns: 3,
-              child: Slider(
-                value: _rating,
-                min: 0,
-                max: 10,
-                divisions: 10,
-                onChanged: (double newValue) {
-                  setState(() {
-                    _rating = newValue;
-                  });
-                },
+            Padding(
+              padding: const EdgeInsets.only(top: 50.0),
+              child: Text(
+                'How do you feel?', // The text you wanted above the slider
+                style: const TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
             ),
+
+            RotatedBox(
+              quarterTurns: 3,
+              child: SliderTheme(
+                data: SliderThemeData(
+                  trackHeight: 32.0, // Customize track height
+                  activeTrackColor: _getTrackColor(_rating),
+                  inactiveTrackColor: Colors.black, // Inactive track color (red)
+                  thumbColor: Colors.white, // Thumb color
+                  overlayColor: Colors.transparent, // No overlay
+                  activeTickMarkColor: Colors.transparent,
+                  inactiveTickMarkColor: Colors.transparent,
+                  thumbShape: RoundSliderThumbShape(enabledThumbRadius: 20.0), // Thumb size
+                ),
+                child: Container(
+                  width: 500.0, // Make the track longer by adjusting the width
+                  child: Slider(
+                    value: _rating,
+                    min: 0,
+                    max: 10,
+                    divisions: 10,
+                    onChanged: (double newValue) {
+                      setState(() {
+                        _rating = newValue;
+                      });
+                    },
+                  ),
+                ),
+              ),
+            ),
+
             const SizedBox(height: 16),
             Text(
-              'Mood Rating: ${_rating.toStringAsFixed(1)}',
+              '${_rating.toStringAsFixed(0)}! ${_getRatingReaction(_rating)}',
               style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 16),
@@ -302,6 +366,7 @@ class _MoodSliderPageState extends State<MoodSliderPage> {
     );
   }
 }
+
 
 class SectionTwoPage extends StatelessWidget {
   const SectionTwoPage({super.key});
