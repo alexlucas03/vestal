@@ -136,7 +136,7 @@ class MoodStats extends StatefulWidget {
 class _MoodStatsState extends State<MoodStats> {
   List<Map<String, dynamic>> _moods = [];
   String formattedDate = DateFormat('yyyyMMdd').format(DateTime.now());
-  bool isMoodSubmittedToday = false;
+  bool isMoodSubmitted = false;
 
   @override
   void initState() {
@@ -145,10 +145,10 @@ class _MoodStatsState extends State<MoodStats> {
   }
 
   void _checkMoodForToday() async {
-    List<Map<String, dynamic>> moodsFromDb = await DatabaseHelper.instance.queryMoodsByDate(formattedDate);
+    List<Map<String, dynamic>> moodsFromDb = await DatabaseHelper.instance.queryAllMoods();
 
     setState(() {
-      isMoodSubmittedToday = moodsFromDb.isNotEmpty;
+      isMoodSubmitted = moodsFromDb.isNotEmpty;
       _moods = moodsFromDb;
     });
   }
@@ -181,7 +181,7 @@ class _MoodStatsState extends State<MoodStats> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            isMoodSubmittedToday
+            isMoodSubmitted
                 ? Column(
                     children: [
                       MoodLineChart(moodData: _moods),
@@ -201,15 +201,14 @@ class _MoodStatsState extends State<MoodStats> {
                       ),
                     ],
                   )
-                : Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      Text(
-                        'No mood recorded today.',
-                        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                      ),
-                    ],
+                : ElevatedButton(
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (context) => MoodSliderPage(fromPage: 'MoodStats'),),
+                      );
+                    },
+                    child: const Text('Rate Your Mood to see your stats'),
                   ),
           ],
         ),
@@ -219,7 +218,7 @@ class _MoodStatsState extends State<MoodStats> {
 }
 
 class MoodSliderPage extends StatefulWidget {
-  final String fromPage; // Added parameter to track the origin page
+  final String fromPage; // Parameter to track the origin page
 
   const MoodSliderPage({super.key, required this.fromPage});
 
@@ -227,11 +226,79 @@ class MoodSliderPage extends StatefulWidget {
   _MoodSliderPageState createState() => _MoodSliderPageState();
 }
 
-class _MoodSliderPageState extends State<MoodSliderPage> {
+class _MoodSliderPageState extends State<MoodSliderPage> with SingleTickerProviderStateMixin {
   double _rating = 5.0;
   String _statusMessage = '';
   String formattedDate = DateFormat('yyyyMMdd').format(DateTime.now());
 
+  // Animation controller for the bouncing arrow
+  late AnimationController _controller;
+  late Animation<double> _bouncingAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+
+    // Animation controller for the bouncing arrow
+    _controller = AnimationController(
+      vsync: this,
+      duration: Duration(milliseconds: 500),
+    )..repeat(reverse: true); // Repeats the animation back and forth
+    
+    _bouncingAnimation = Tween<double>(begin: 0, end: 10).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  // Function to determine track color based on rating
+  Color _getTrackColor(double rating) {
+    if (rating >= 8) {
+      return Colors.green; // Green for 8-10
+    } else if (rating >= 6) {
+      return Colors.yellow; // Yellow for 6-8
+    } else if (rating >= 3) {
+      return Colors.orange; // Orange for 3-5
+    } else {
+      return Colors.red; // Red for 0-2
+    }
+  }
+
+  // Function to get rating reactions
+  String _getRatingReaction(double rating) {
+    if (rating == 0) {
+      return 'Terrible! 😭';
+    } else if (rating == 1) {
+      return 'Very bad! 😞';
+    } else if (rating == 2) {
+      return 'Not good. 😔';
+    } else if (rating == 3) {
+      return 'Could be better. 😟';
+    } else if (rating == 4) {
+      return 'A little disappointing. 😕';
+    } else if (rating == 5) {
+      return 'Okay. 😐';
+    } else if (rating == 6) {
+      return 'Not bad, not great. 🙂';
+    } else if (rating == 7) {
+      return 'Pretty good! 😌';
+    } else if (rating == 8) {
+      return 'Very good! 😊';
+    } else if (rating == 9) {
+      return 'Excellent! 😍';
+    } else if (rating == 10) {
+      return 'Perfect! 😁';
+    } else {
+      return 'Unknown rating'; // Default case
+    }
+  }
+
+  // Submit mood to the database
   void _submitMood() async {
     int rating = _rating.toInt();
     setState(() {
@@ -255,9 +322,8 @@ class _MoodSliderPageState extends State<MoodSliderPage> {
     }
   }
 
+  // No mood action (back to the previous screen)
   void _noMood() async {
-
-    // Navigate back to the correct page based on 'fromPage' parameter
     if (widget.fromPage == 'MoodStats') {
       Navigator.pushReplacement(
         context,
@@ -271,47 +337,6 @@ class _MoodSliderPageState extends State<MoodSliderPage> {
     }
   }
 
-  // Function to determine active track color based on slider value
-  Color _getTrackColor(double rating) {
-    if (rating >= 8) {
-      return Colors.green; // Green for 8-10
-    } else if (rating >= 6) {
-      return Colors.yellow; // Yellow for 6-8
-    } else if (rating >= 3) {
-      return Colors.orange; // Blue for 3-5
-    } else {
-      return Colors.red; // Red for 0-2
-    }
-  }
-
-  String _getRatingReaction(double rating) {
-  if (rating == 0) {
-    return 'Absolutely terrible! 😭';
-  } else if (rating == 1) {
-    return 'Very bad! 😞';
-  } else if (rating == 2) {
-    return 'Not good at all. 😔';
-  } else if (rating == 3) {
-    return 'Could be better. 😟';
-  } else if (rating == 4) {
-    return 'Somewhat disappointing. 😕';
-  } else if (rating == 5) {
-    return 'It’s okay. 😐';
-  } else if (rating == 6) {
-    return 'Not bad, but not great. 🙂';
-  } else if (rating == 7) {
-    return 'Pretty good! 😌';
-  } else if (rating == 8) {
-    return 'Very good! 😊';
-  } else if (rating == 9) {
-    return 'Excellent! 😍';
-  } else if (rating == 10) {
-    return 'Perfect! 😁';
-  } else {
-    return 'Unknown rating'; // Default case
-  }
-}
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -323,29 +348,28 @@ class _MoodSliderPageState extends State<MoodSliderPage> {
             Padding(
               padding: const EdgeInsets.only(top: 50.0),
               child: Text(
-                'How do you feel?', // The text you wanted above the slider
+                'How do you feel?',
                 style: const TextStyle(
                   fontSize: 24,
                   fontWeight: FontWeight.bold,
                 ),
               ),
             ),
-
             RotatedBox(
               quarterTurns: 3,
               child: SliderTheme(
                 data: SliderThemeData(
-                  trackHeight: 32.0, // Customize track height
+                  trackHeight: 32.0,
                   activeTrackColor: _getTrackColor(_rating),
-                  inactiveTrackColor: Colors.black, // Inactive track color (red)
-                  thumbColor: Colors.white, // Thumb color
-                  overlayColor: Colors.transparent, // No overlay
+                  inactiveTrackColor: Colors.black,
+                  thumbColor: Colors.white,
+                  overlayColor: Colors.transparent,
                   activeTickMarkColor: Colors.transparent,
                   inactiveTickMarkColor: Colors.transparent,
-                  thumbShape: RoundSliderThumbShape(enabledThumbRadius: 20.0), // Thumb size
+                  thumbShape: RoundSliderThumbShape(enabledThumbRadius: 20.0),
                 ),
                 child: Container(
-                  width: 500.0, // Make the track longer by adjusting the width
+                  width: 500.0,
                   child: Slider(
                     value: _rating,
                     min: 0,
@@ -360,29 +384,47 @@ class _MoodSliderPageState extends State<MoodSliderPage> {
                 ),
               ),
             ),
-
-            const SizedBox(height: 16),
-            Text(
-              '${_rating.toStringAsFixed(0)}! ${_getRatingReaction(_rating)}',
-              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
             const SizedBox(height: 16),
             ElevatedButton(
               onPressed: _submitMood,
-              child: const Text('Submit Mood'),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Mood text with rating and reaction
+                  Text(
+                    '${_rating.toStringAsFixed(0)}! ${_getRatingReaction(_rating)}',
+                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                  SizedBox(width: 10),
+                  AnimatedBuilder(
+                    animation: _bouncingAnimation,
+                    builder: (context, child) {
+                      return Transform.translate(
+                        offset: Offset(_bouncingAnimation.value, 0), // Bounce left to right (X axis)
+                        child: child,
+                      );
+                    },
+                    child: Icon(
+                      Icons.arrow_forward,
+                      size: 20,
+                    ),
+                  ),
+                ],
+              ),
             ),
             const SizedBox(height: 16),
             ElevatedButton(
               onPressed: _noMood,
               child: const Text('No mood'),
             ),
+            const SizedBox(height: 16),
+            Text(_statusMessage, style: TextStyle(fontSize: 16, fontStyle: FontStyle.italic)),
           ],
         ),
       ),
     );
   }
 }
-
 
 class SectionTwoPage extends StatelessWidget {
   const SectionTwoPage({super.key});
