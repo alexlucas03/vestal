@@ -60,8 +60,8 @@ class _MoodLineChartState extends State<MoodLineChart> {
     if (filteredData.isEmpty) {
       return {
         'average': 0.0,
-        'highest': 0.0,
-        'lowest': 0.0,
+        'mostCommon': 0,
+        'longestStreak': 0,
       };
     }
 
@@ -69,14 +69,41 @@ class _MoodLineChartState extends State<MoodLineChart> {
         .map((data) => (data['rating'] as num).toDouble())
         .toList();
 
+    // Calculate average
     double average = ratings.reduce((a, b) => a + b) / ratings.length;
-    double highest = ratings.reduce((a, b) => a > b ? a : b);
-    double lowest = ratings.reduce((a, b) => a < b ? a : b);
+
+    // Calculate most common rating
+    Map<double, int> frequencyMap = {};
+    for (var rating in ratings) {
+      frequencyMap[rating] = (frequencyMap[rating] ?? 0) + 1;
+    }
+    double mostCommon = frequencyMap.entries
+        .reduce((a, b) => a.value > b.value ? a : b)
+        .key;
+
+    // Calculate longest streak
+    List<DateTime> dates = filteredData
+        .map((data) => DateTime.parse(data['date'].toString()))
+        .toList()
+      ..sort();
+    
+    int currentStreak = 1;
+    int longestStreak = 1;
+    
+    for (int i = 1; i < dates.length; i++) {
+      // Check if dates are consecutive
+      if (dates[i].difference(dates[i - 1]).inDays == 1) {
+        currentStreak++;
+        longestStreak = currentStreak > longestStreak ? currentStreak : longestStreak;
+      } else {
+        currentStreak = 1;
+      }
+    }
 
     return {
       'average': average,
-      'highest': highest,
-      'lowest': lowest,
+      'mostCommon': mostCommon,
+      'longestStreak': longestStreak,
     };
   }
 
@@ -84,7 +111,7 @@ class _MoodLineChartState extends State<MoodLineChart> {
   Widget build(BuildContext context) {
     if (filteredData.isEmpty) {
       return const SizedBox(
-        height: 200,
+        height: 210,
         child: Center(
           child: Text('No mood data available'),
         ),
@@ -117,7 +144,7 @@ class _MoodLineChartState extends State<MoodLineChart> {
     return Column(
       children: [
         SizedBox(
-          height: 200,
+          height: 210,
           child: LineChart(
             LineChartData(
               gridData: FlGridData(
@@ -128,14 +155,14 @@ class _MoodLineChartState extends State<MoodLineChart> {
                 verticalInterval: 5,   // Show grid lines every 5 units on X-axis
                 getDrawingHorizontalLine: (value) {
                   return FlLine(
-                    color: Colors.grey.withOpacity(0.2),
+                    color: Colors.grey,
                     strokeWidth: 1,
                     dashArray: [5, 5], // Optional: makes the lines dashed
                   );
                 },
                 getDrawingVerticalLine: (value) {
                   return FlLine(
-                    color: Colors.grey.withOpacity(0.2),
+                    color: Colors.grey,
                     strokeWidth: 1,
                     dashArray: [5, 5], // Optional: makes the lines dashed
                   );
@@ -152,42 +179,56 @@ class _MoodLineChartState extends State<MoodLineChart> {
                         final date = DateTime.parse(dateStr);
                         final monthKey = DateFormat('MMM').format(date).toLowerCase();
                         final dayText = date.day.toString();
-                        final isMonthCenter = monthCenterIndices[monthKey] == index;
 
-                        return Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(dayText, style: const TextStyle(fontSize: 12)),
-                            if (isMonthCenter)
-                              Text(
-                                monthKey.toUpperCase(),
-                                style: const TextStyle(
-                                  fontSize: 14,
-                                  color: Colors.grey,
-                                ),
-                              ),
-                            if (!isMonthCenter)
-                              const SizedBox(height: 14),
-                          ],
-                        );
+                        // Show the month abbreviation (MMM) only for the first data point of each month
+                        bool showMonth = false;
+                        if (index == 0) {
+                          showMonth = true;  // Always show for the first item
+                        } else {
+                          DateTime prevDate = DateTime.parse(sortedData[index - 1]['date'].toString());
+                          if (prevDate.month != date.month) {
+                            showMonth = true;  // Show month abbreviation when the month changes
+                          }
+                        }
+
+                        // Show labels only for some selected points (e.g., every 5th data point or at the start of a new month)
+                        bool showLabel = index % 5 == 0 || (index == sortedData.length - 1);
+
+                        if (showLabel) {
+                          return SideTitleWidget(
+                            axisSide: meta.axisSide,
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(dayText, style: const TextStyle(fontSize: 12)),
+                                if (showMonth)
+                                  Text(
+                                    monthKey.toUpperCase(),
+                                    style: const TextStyle(fontSize: 14, color: Colors.grey),
+                                  ),
+                              ],
+                            ),
+                          );
+                        }
                       }
-                      return const Text('');
+                      return const SizedBox.shrink();
                     },
-                    reservedSize: 40,
+                    reservedSize: 50, // Adjust this value to provide more space for bottom titles
+                    interval: 1,
                   ),
                 ),
                 leftTitles: AxisTitles(
                   sideTitles: SideTitles(
                     showTitles: true,
-                    reservedSize: 28,
+                    reservedSize: 35,
                     interval: 2,
                   ),
                 ),
-                topTitles: const AxisTitles(
-                  sideTitles: SideTitles(showTitles: false),
+                topTitles: AxisTitles(
+                  sideTitles: SideTitles(showTitles: false), // Disable titles on the top
                 ),
-                rightTitles: const AxisTitles(
-                  sideTitles: SideTitles(showTitles: false),
+                rightTitles: AxisTitles(
+                  sideTitles: SideTitles(showTitles: false), // Disable titles on the right
                 ),
               ),
               borderData: FlBorderData(show: true),
@@ -210,7 +251,7 @@ class _MoodLineChartState extends State<MoodLineChart> {
                   dotData: const FlDotData(show: true),
                   belowBarData: BarAreaData(
                     show: true,
-                    color: const Color(0xFF3A4C7A).withOpacity(0.2),
+                    color: const Color(0xFF3A4C7A),
                   ),
                 ),
               ],
@@ -243,10 +284,10 @@ class _MoodLineChartState extends State<MoodLineChart> {
                 'Average Mood: ${stats['average'].toStringAsFixed(1)}',
               ),
               Text(
-                'Highest Mood: ${stats['highest'].toStringAsFixed(1)}',
+                'Most common: ${stats['mostCommon'].toStringAsFixed(0)}',
               ),
               Text(
-                'Lowest Mood: ${stats['lowest'].toStringAsFixed(1)}',
+                'Longest streak: ${stats['longestStreak'].toStringAsFixed(0)}',
               ),
             ],
           ),
@@ -265,9 +306,6 @@ class _MoodLineChartState extends State<MoodLineChart> {
       style: ElevatedButton.styleFrom(
         backgroundColor: isSelected ? Colors.white : Color(0xFF3A4C7A), // Inverse colors
         foregroundColor: isSelected ? Color(0xFF3A4C7A) : Colors.white, // Inverse colors
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(8),
-        ),
         side: BorderSide(
           color: isSelected ? Color(0xFF3A4C7A) : Colors.transparent, // Border for selected button
         ),
