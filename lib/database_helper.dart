@@ -56,30 +56,30 @@ class DatabaseHelper {
   }
 
   Future<int> addMood(int rating, String date) async {
-  Database db = await instance.db;
+    Database db = await instance.db;
 
-  // Check if a mood entry for the given date already exists
-  List<Map<String, dynamic>> existingMoods = await db.query(
-    'moods',
-    where: 'date = ?',
-    whereArgs: [date],
-  );
-
-  if (existingMoods.isNotEmpty) {
-    // Update the existing mood entry with the new rating
-    int date = existingMoods.first['date']; 
-    return await db.update(
+    // Check if a mood entry for the given date already exists
+    List<Map<String, dynamic>> existingMoods = await db.query(
       'moods',
-      {'rating': rating},
       where: 'date = ?',
       whereArgs: [date],
     );
-  } else {
-    // Insert a new mood entry
-    Mood mood = Mood(rating: rating, date: date);
-    return await db.insert('moods', mood.toMap());
+
+    if (existingMoods.isNotEmpty) {
+      // Update the existing mood entry with the new rating
+      int date = existingMoods.first['date'];
+      return await db.update(
+        'moods',
+        {'rating': rating},
+        where: 'date = ?',
+        whereArgs: [date],
+      );
+    } else {
+      // Insert a new mood entry
+      Mood mood = Mood(rating: rating, date: date);
+      return await db.insert('moods', mood.toMap());
+    }
   }
-}
 
   Future<List<Map<String, dynamic>>> queryAllMoods() async {
     Database db = await instance.db;

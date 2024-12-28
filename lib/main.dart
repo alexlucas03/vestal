@@ -195,10 +195,11 @@ class _MoodStatsState extends State<MoodStats> {
                         },
                         child: const Text('Rate Your Mood'),
                       ),
-                      ElevatedButton(
-                        onPressed: _clearMoods,
-                        child: const Text('Clear All Moods'),
-                      ),
+                      // clear mood database button
+                      // ElevatedButton(
+                      //   onPressed: _clearMoods,
+                      //   child: const Text('Clear All Moods'),
+                      // ),
                     ],
                   )
                 : ElevatedButton(
@@ -228,7 +229,6 @@ class MoodSliderPage extends StatefulWidget {
 
 class _MoodSliderPageState extends State<MoodSliderPage> with SingleTickerProviderStateMixin {
   double _rating = 5.0;
-  String _statusMessage = '';
   String formattedDate = DateFormat('yyyyMMdd').format(DateTime.now());
 
   // Animation controller for the bouncing arrow
@@ -301,9 +301,6 @@ class _MoodSliderPageState extends State<MoodSliderPage> with SingleTickerProvid
   // Submit mood to the database
   void _submitMood() async {
     int rating = _rating.toInt();
-    setState(() {
-      _statusMessage = 'Submitting mood...';
-    });
 
     // Add the mood to the database
     await DatabaseHelper.instance.addMood(rating, formattedDate);
@@ -417,8 +414,6 @@ class _MoodSliderPageState extends State<MoodSliderPage> with SingleTickerProvid
               onPressed: _noMood,
               child: const Text('No mood'),
             ),
-            const SizedBox(height: 16),
-            Text(_statusMessage, style: TextStyle(fontSize: 16, fontStyle: FontStyle.italic)),
           ],
         ),
       ),

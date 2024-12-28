@@ -248,9 +248,9 @@ class _MoodLineChartState extends State<MoodLineChart> {
                   isCurved: true,
                   color: const Color(0xFF3A4C7A),
                   barWidth: 3,
-                  dotData: const FlDotData(show: true),
+                  dotData: const FlDotData(show: false),
                   belowBarData: BarAreaData(
-                    show: true,
+                    show: false,
                     color: const Color(0xFF3A4C7A),
                   ),
                 ),
@@ -270,28 +270,69 @@ class _MoodLineChartState extends State<MoodLineChart> {
             ],
           ),
         ),
-        // Statistics Column
+        SizedBox(height: 16,),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 10.0),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                'In this timeframe:',
+              const Divider(color: Color(0xFF3A4C7A), thickness: 1),
+              SizedBox(height: 5),
+              // Average Mood with bigger gap and divider
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'Average Mood:',
+                    style: const TextStyle(fontSize: 16),
+                  ),
+                  Text(
+                    '${stats['average'].toStringAsFixed(1)}',
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                  ),
+                ],
               ),
-              SizedBox(height: 10),
-              Text(
-                'Average Mood: ${stats['average'].toStringAsFixed(1)}',
+              SizedBox(height: 5),
+              const Divider(color: Color(0xFF3A4C7A), thickness: 1),
+              SizedBox(height: 5),
+
+              // Most Common Mood with divider
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'Most common:',
+                    style: const TextStyle(fontSize: 16),
+                  ),
+                  Text(
+                    '${stats['mostCommon'].toStringAsFixed(0)}',
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                  ),
+                ],
               ),
-              Text(
-                'Most common: ${stats['mostCommon'].toStringAsFixed(0)}',
+              SizedBox(height: 5),
+              const Divider(color: Color(0xFF3A4C7A), thickness: 1),
+              SizedBox(height: 10), // Gap between statistics
+
+              // Longest Streak with divider
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'Longest streak:',
+                    style: const TextStyle(fontSize: 16),
+                  ),
+                  Text(
+                    '${stats['longestStreak'].toStringAsFixed(0)}',
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                  ),
+                ],
               ),
-              Text(
-                'Longest streak: ${stats['longestStreak'].toStringAsFixed(0)}',
-              ),
+              SizedBox(height: 5),
+              const Divider(color: Color(0xFF3A4C7A), thickness: 1),
             ],
           ),
-        ),
+        )
       ],
     );
   }
