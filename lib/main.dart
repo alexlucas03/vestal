@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'database_helper.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -11,10 +12,30 @@ void main() async {
   databaseFactory = databaseFactoryFfi;
   await DatabaseHelper.instance.initDb();
 
+  // Check if user code exists, if not generate and store it
+  String? userCode = await DatabaseHelper.instance.getUserCode();
+  if (userCode == null) {
+    String newCode = generateRandomCode(6);
+    await DatabaseHelper.instance.storeUserCode(newCode);
+  }
+
   String formattedDate = DateFormat('yyyyMMdd').format(DateTime.now());
   bool isMoodSubmittedToday = await DatabaseHelper.instance.hasMoodForToday(formattedDate);
 
   runApp(MyApp(isMoodSubmittedToday: isMoodSubmittedToday));
+}
+
+String generateRandomCode(int length) {
+  const String chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  Random random = Random();
+  String code = '';
+
+  for (int i = 0; i < length; i++) {
+    int index = random.nextInt(chars.length);  // Random index in the chars string
+    code += chars[index];  // Append the character at that index
+  }
+
+  return code;
 }
 
 class MyApp extends StatelessWidget {
@@ -394,21 +415,45 @@ class _MoodSliderPageState extends State<MoodSliderPage> with SingleTickerProvid
   // Submit mood to the database
   void _submitMood() async {
     int rating = _rating.toInt();
+    
+    try {
+      // Add the mood to the local SQLite database
+      await DatabaseHelper.instance.addMood(rating, formattedDate);
 
-    // Add the mood to the database
-    await DatabaseHelper.instance.addMood(rating, formattedDate);
+      // Check if user has a partner code
+      String? userCode = await DatabaseHelper.instance.getUserCode();
+      String? partnerCode = await DatabaseHelper.instance.getPartnerCode();
 
-    // Navigate back to the correct page based on 'fromPage' parameter
-    if (widget.fromPage == 'MoodStats') {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (context) => const MoodStats()),
-      );
-    } else {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (context) => const MyHomePage(title: 'Voyagers')),
-      );
+      // If both user code and partner code exist, sync with cloud
+      if (userCode != null && partnerCode != null) {
+        try {
+          await DatabaseHelper.instance.CloudAddMood(rating, formattedDate, userCode);
+        } catch (cloudError) {
+          print('Error syncing with cloud: $cloudError');
+          // Consider showing a snackbar to user about cloud sync failure
+          // but continue with local navigation
+        }
+      }
+
+      // Navigate back to the correct page based on 'fromPage' parameter
+      if (widget.fromPage == 'MoodStats') {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => const MoodStats()),
+        );
+      } else {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => const MyHomePage(title: 'Voyagers')),
+        );
+      }
+    } catch (error) {
+      // Handle any errors that occurred during mood submission
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error saving mood: ${error.toString()}')),
+        );
+      }
     }
   }
 
@@ -562,48 +607,118 @@ class SectionFourPage extends StatelessWidget {
   }
 }
 
-class SettingsPage extends StatelessWidget {
+class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
 
+  @override
+  State<SettingsPage> createState() => _SettingsPageState();
+}
+
+class _SettingsPageState extends State<SettingsPage> {
+  String? userCode;
+  String? partnerCode;
+  bool _isLoading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadData();
+  }
+
+  Future<void> _loadData() async {
+    if (!mounted) return;
+    setState(() => _isLoading = true);
+    try {
+      final code = await DatabaseHelper.instance.getUserCode();
+      final pCode = await DatabaseHelper.instance.getPartnerCode();
+      if (!mounted) return;
+      setState(() {
+        userCode = code;
+        partnerCode = pCode;
+        _isLoading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _createPartnerTable(String partnerCode, String userCode) async {
+    await DatabaseHelper.instance.createPartnerTable(partnerCode, userCode);
+  }
+
   void _showPartnerCodeDialog(BuildContext context) {
-    String code = '';
-    
+    // Create a StatefulBuilder to manage dialog state
     showDialog(
       context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: const Text('Enter Partner Code'),
-          content: TextField(
-            maxLength: 6,
-            keyboardType: TextInputType.number,
-            decoration: const InputDecoration(
-              hintText: 'Enter 6-digit code',
-              border: OutlineInputBorder(),
-            ),
-            onChanged: (value) {
-              code = value;
-            },
-          ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-              },
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                if (code.length == 6) {
-                  // TODO: Implement partner code logic
-                  Navigator.of(context).pop();
-                }
-              },
-              child: const Text('Submit'),
-            ),
-          ],
+      barrierDismissible: false,
+      builder: (BuildContext dialogContext) {
+        final TextEditingController dialogController = TextEditingController();
+
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text('Enter Partner Code'),
+              content: TextField(
+                controller: dialogController,
+                maxLength: 6,
+                decoration: const InputDecoration(
+                  hintText: 'Enter 6-digit code',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    Navigator.of(dialogContext).pop();
+                  },
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  onPressed: () async {
+                    final code = dialogController.text;
+                    if (code.length == 6) {
+                      try {
+                        await DatabaseHelper.instance.storePartnerCode(code);
+                        if (!mounted) return;
+                        
+                        // Get the current user code
+                        final userCode = await DatabaseHelper.instance.getUserCode();
+                        if (userCode != null) {
+                          // Create partner table with the submitted code and user code
+                          await _createPartnerTable(code, userCode);
+                        }
+                        
+                        Navigator.of(dialogContext).pop();
+                        // Use Future.microtask to avoid setState during build
+                        Future.microtask(() => _loadData());
+                      } catch (e) {
+                        if (!mounted) return;
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Error: ${e.toString()}')),
+                        );
+                      }
+                    } else {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Please enter a valid 6-digit code')),
+                      );
+                    }
+                  },
+                  child: const Text('Submit'),
+                ),
+              ],
+            );
+          },
         );
       },
-    );
+    ).whenComplete(() {
+      // Ensure dialog controller is disposed when dialog is closed
+      if (mounted) {
+        setState(() {
+          // Refresh state if needed after dialog closes
+        });
+      }
+    });
   }
 
   @override
@@ -612,49 +727,68 @@ class SettingsPage extends StatelessWidget {
       appBar: AppBar(
         title: const Text('Settings'),
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            // Add Partner Button
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                minimumSize: const Size(double.infinity, 50),
-                backgroundColor: Theme.of(context).primaryColor,
-                foregroundColor: Colors.white,
-              ),
-              onPressed: () => _showPartnerCodeDialog(context),
-              child: const Text(
-                'Add Partner',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
+      body: _isLoading 
+        ? const Center(child: CircularProgressIndicator())
+        : Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  'Your Code: ${userCode ?? ''}',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                  ),
                 ),
-              ),
-            ),
-            const SizedBox(height: 16),
-            // Reset Data Button
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                minimumSize: const Size(double.infinity, 50),
-                backgroundColor: Colors.red,
-                foregroundColor: Colors.white,
-              ),
-              onPressed: () {
-                // TODO: Implement reset data logic
-              },
-              child: const Text(
-                'Reset Data',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
+                Text(
+                  'Partner Code: ${partnerCode ?? ''}',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                  ),
                 ),
-              ),
+                const SizedBox(height: 16),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    minimumSize: const Size(double.infinity, 50),
+                    backgroundColor: Theme.of(context).primaryColor,
+                    foregroundColor: Colors.white,
+                  ),
+                  onPressed: () => _showPartnerCodeDialog(context),
+                  child: const Text(
+                    'Add Partner',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    minimumSize: const Size(double.infinity, 50),
+                    backgroundColor: Colors.red,
+                    foregroundColor: Colors.white,
+                  ),
+                  onPressed: () async {
+                    // Implement reset data logic
+                    await DatabaseHelper.instance.clearDb();
+                    if (mounted) {
+                      _loadData();
+                    }
+                  },
+                  child: const Text(
+                    'Reset Data',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ],
             ),
-          ],
-        ),
-      ),
+          ),
     );
   }
 }

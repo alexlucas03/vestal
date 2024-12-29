@@ -4,11 +4,14 @@ import 'package:path_provider/path_provider.dart';
 import 'package:sqflite/sqflite.dart';
 import 'mood.dart';
 import 'dart:io';
+import 'package:postgres/postgres.dart';
 
 class DatabaseHelper {
   static final DatabaseHelper instance = DatabaseHelper._instance();
   static Database? _database;
   DatabaseHelper._instance();
+
+// ONBOARD - SQLITE
 
   Future<Database> get db async {
     _database ??= await initDb();
@@ -30,7 +33,7 @@ class DatabaseHelper {
     // Open database with onUpgrade callback
     return await openDatabase(
       path,
-      version: 2,
+      version: 4, // Increased version number for new table
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
@@ -38,12 +41,24 @@ class DatabaseHelper {
 
   Future _onCreate(Database db, int version) async {
     await _createMoodsTable(db);
+    await _createUserDataTable(db);
   }
 
   Future _onUpgrade(Database db, int oldVersion, int newVersion) async {
-    // Handle database upgrades here
-    await _createMoodsTable(db);
+  if (oldVersion < 4) {
+    // Check if the partner_code column exists
+    var tableInfo = await db.rawQuery('PRAGMA table_info(user_data)');
+    bool hasPartnerCode = tableInfo.any((column) => column['name'] == 'partner_code');
+    
+    if (!hasPartnerCode) {
+      // Add the partner_code column if it doesn't exist
+      await db.execute('ALTER TABLE user_data ADD COLUMN partner_code TEXT');
+    }
+    
+    // If the table doesn't exist at all, create it
+    await _createUserDataTable(db);
   }
+}
 
   // Separate method for creating the moods table
   Future _createMoodsTable(Database db) async {
@@ -54,6 +69,82 @@ class DatabaseHelper {
       )
     ''');
   }
+
+  // New method for creating the user_data table
+  Future _createUserDataTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS user_data (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_code TEXT,
+        partner_code TEXT 
+      )
+    ''');
+  }
+
+  // Method to store user code
+  Future<void> storeUserCode(String code) async {
+    Database db = await instance.db;
+    
+    // Check if a code already exists
+    List<Map<String, dynamic>> existing = await db.query('user_data');
+    if (existing.isEmpty) {
+      await db.insert('user_data', {'user_code': code});
+    }
+  }
+
+  // Method to get user code
+  Future<String?> getUserCode() async {
+    Database db = await instance.db;
+    List<Map<String, dynamic>> results = await db.query('user_data');
+    if (results.isNotEmpty) {
+      return results.first['user_code'] as String;
+    }
+    return null;
+  }
+
+  // Fixed storePartnerCode method
+Future<void> storePartnerCode(String code) async {
+    Database db = await instance.db;
+    
+    List<Map<String, dynamic>> existing = await db.query('user_data');
+    if (existing.isEmpty) {
+        // If no record exists, create new one with partner code
+        await db.insert('user_data', {'partner_code': code});
+    } else {
+        // If record exists, update it with partner code
+        await db.update(
+            'user_data',
+            {'partner_code': code},
+            where: 'id = ?',
+            whereArgs: [existing.first['id']],
+        );
+    }
+}
+
+// Fixed getPartnerCode method
+Future<String?> getPartnerCode() async {
+    Database db = await instance.db;
+    List<Map<String, dynamic>> results = await db.query('user_data');
+    if (results.isNotEmpty && results.first['partner_code'] != null) {
+        return results.first['partner_code'] as String;
+    }
+    return null;
+}
+
+// Add method to clear partner code
+Future<void> clearPartnerCode() async {
+    Database db = await instance.db;
+    List<Map<String, dynamic>> existing = await db.query('user_data');
+    if (existing.isNotEmpty) {
+        await db.update(
+            'user_data',
+            {'partner_code': null},
+            where: 'id = ?',
+            whereArgs: [existing.first['id']],
+        );
+    }
+}
+
 
   Future<int> addMood(int rating, String date) async {
     Database db = await instance.db;
@@ -88,13 +179,16 @@ class DatabaseHelper {
 
   Future<int> clearDb() async {
     Database db = await instance.db;
+    await db.delete('user_data'); // Also clear user data when clearing DB
     return await db.delete('moods');
   }
 
   Future<void> deleteAndRecreateTable() async {
     Database db = await instance.db;
     await db.execute('DROP TABLE IF EXISTS moods');
+    await db.execute('DROP TABLE IF EXISTS user_data');
     await _createMoodsTable(db);
+    await _createUserDataTable(db);
   }
 
   // Close the database
@@ -129,5 +223,138 @@ class DatabaseHelper {
     );
 
     return result.isNotEmpty; // Returns true if there's a record for today
+  }
+
+// CLOUD - Neon Postgres
+
+  Future<void> createPartnerTable(String partnerCode, String userCode) async {
+    try {
+      final conn = await Connection.open(Endpoint(
+        host: 'ep-yellow-truth-a5ebo559.us-east-2.aws.neon.tech',
+        database: 'voyagersdb',
+        username: 'voyageruser',
+        password: 'Sk3l3ton!sk3l3ton',
+      ));
+
+      // Generate both possible table name combinations
+      String tableNameForward = '${partnerCode}_$userCode'.toLowerCase();
+      String tableNameReverse = '${userCode}_$partnerCode'.toLowerCase();
+      
+      // Check if either table exists
+      final existingTables = await conn.execute('''
+        SELECT tablename 
+        FROM pg_catalog.pg_tables 
+        WHERE tablename IN ('$tableNameForward', '$tableNameReverse')
+      ''');
+
+      String finalTableName;
+      if (existingTables.isNotEmpty) {
+        // Use the existing table name if found
+        finalTableName = existingTables[0][0] as String;
+      } else {
+        // If no table exists, use the forward arrangement
+        finalTableName = tableNameForward;
+        
+        // Create the new table with proper column definitions
+        await conn.execute('''
+          CREATE TABLE IF NOT EXISTS "$finalTableName" (
+            date TEXT,
+            ${partnerCode}_mood TEXT,
+            ${userCode}_mood TEXT
+          )
+        ''');
+      }
+
+      // Clean up any other tables with this user code (except the one we're using)
+      await conn.execute('''
+        DO \$\$
+        DECLARE
+          _table text;
+        BEGIN
+          FOR _table IN 
+            SELECT tablename 
+            FROM pg_catalog.pg_tables 
+            WHERE tablename LIKE '%${userCode.toLowerCase()}%'
+            AND tablename != '$finalTableName'
+          LOOP
+            EXECUTE 'DROP TABLE IF EXISTS ' || quote_ident(_table);
+          END LOOP;
+        END \$\$;
+      ''');
+
+      Database sqliteDb = await instance.db;
+      List<Map<String, dynamic>> localMoods = await sqliteDb.query('moods');
+
+      // For each mood in SQLite, sync with PostgreSQL
+      for (var mood in localMoods) {
+        String moodDate = mood['date'].toString();
+        String moodRating = mood['rating'].toString();
+
+        // Check if the date already exists in PostgreSQL
+        final existingRow = await conn.execute(
+          'SELECT * FROM "$finalTableName" WHERE date = \'$moodDate\''
+        );
+
+        if (existingRow.isEmpty) {
+          // Insert new row if date doesn't exist
+          await conn.execute(
+            'INSERT INTO "$finalTableName" (date, ${userCode}_mood) VALUES (\'$moodDate\', \'$moodRating\')'
+          );
+        } else {
+          // Update existing row with user's mood
+          await conn.execute(
+            'UPDATE "$finalTableName" SET ${userCode}_mood = \'$moodRating\' WHERE date = \'$moodDate\''
+          );
+        }
+      }
+
+      await conn.close();
+    } catch (e) {
+      print('Error in createPartnerTable: ${e.toString()}');
+      rethrow;
+    }
+  }
+
+  Future<void> CloudAddMood(int rating, String date, String userCode) async {
+    final conn = await Connection.open(Endpoint(
+      host: 'ep-yellow-truth-a5ebo559.us-east-2.aws.neon.tech',
+      database: 'voyagersdb',
+      username: 'voyageruser',
+      password: 'Sk3l3ton!sk3l3ton',
+    ));
+
+    try {
+      // First, find tables matching the user code
+      final tableResult = await conn.execute(
+        'SELECT tablename FROM pg_catalog.pg_tables WHERE tablename LIKE \'%${userCode.toLowerCase()}%\''
+      );
+
+      if (tableResult.isNotEmpty) {
+        final tableName = tableResult[0][0] as String;
+        
+        // Check if a row exists with the given date
+        final existingRow = await conn.execute(
+          'SELECT * FROM "$tableName" WHERE date = \'$date\''
+        );
+
+        String ratingStr = rating.toString();
+
+        if (existingRow.isNotEmpty) {
+          // Update existing row
+          await conn.execute(
+            'UPDATE "$tableName" SET ${userCode}_mood = \'$ratingStr\' WHERE date = \'$date\''
+          );
+        } else {
+          // Insert new row if it doesn't exist
+          await conn.execute(
+            'INSERT INTO "$tableName" (date, ${userCode}_mood) VALUES (\'$date\', \'$ratingStr\')'
+          );
+        }
+      }
+      await conn.close();
+    } catch (e) {
+      print('Error in CloudAddMood: $e');
+      rethrow;
+    }
   }
 }
