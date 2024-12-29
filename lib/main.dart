@@ -68,9 +68,9 @@ class _MyHomePageState extends State<MyHomePage> with SingleTickerProviderStateM
     );
 
     // Create animations for each button
-    _angleAnimations = List.generate(4, (index) {
+    _angleAnimations = List.generate(5, (index) {
       // All buttons start at -pi/2 (top position) and rotate to their final positions
-      final finalAngle = (index * (2 * pi / 4)) - (pi / 2);
+      final finalAngle = (index * (2 * pi / 5)) - (pi / 2);
       return Tween<double>(
         begin: -pi / 2, // Starting from top
         end: finalAngle,
@@ -139,7 +139,7 @@ class _MyHomePageState extends State<MyHomePage> with SingleTickerProviderStateM
 
     List<Widget> buttons = [];
 
-    for (int i = 0; i < 4; i++) {
+    for (int i = 0; i < 5; i++) {
       buttons.add(
         AnimatedBuilder(
           animation: _controller,
@@ -211,6 +211,8 @@ class _MyHomePageState extends State<MyHomePage> with SingleTickerProviderStateM
         return const SectionThreePage();
       case 3:
         return const SectionFourPage();
+      case 4:
+        return const SettingsPage();
       default:
         return const SizedBox.shrink();
     }
@@ -555,6 +557,103 @@ class SectionFourPage extends StatelessWidget {
       ),
       body: const Center(
         child: Text('You are on Section 4 Page!', style: TextStyle(color: Colors.white)),
+      ),
+    );
+  }
+}
+
+class SettingsPage extends StatelessWidget {
+  const SettingsPage({super.key});
+
+  void _showPartnerCodeDialog(BuildContext context) {
+    String code = '';
+    
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Enter Partner Code'),
+          content: TextField(
+            maxLength: 6,
+            keyboardType: TextInputType.number,
+            decoration: const InputDecoration(
+              hintText: 'Enter 6-digit code',
+              border: OutlineInputBorder(),
+            ),
+            onChanged: (value) {
+              code = value;
+            },
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                if (code.length == 6) {
+                  // TODO: Implement partner code logic
+                  Navigator.of(context).pop();
+                }
+              },
+              child: const Text('Submit'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Settings'),
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            // Add Partner Button
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                minimumSize: const Size(double.infinity, 50),
+                backgroundColor: Theme.of(context).primaryColor,
+                foregroundColor: Colors.white,
+              ),
+              onPressed: () => _showPartnerCodeDialog(context),
+              child: const Text(
+                'Add Partner',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            // Reset Data Button
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                minimumSize: const Size(double.infinity, 50),
+                backgroundColor: Colors.red,
+                foregroundColor: Colors.white,
+              ),
+              onPressed: () {
+                // TODO: Implement reset data logic
+              },
+              child: const Text(
+                'Reset Data',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
