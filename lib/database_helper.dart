@@ -33,7 +33,7 @@ class DatabaseHelper {
     // Open database with onUpgrade callback
     return await openDatabase(
       path,
-      version: 4, // Increased version number for new table
+      version: 5, // Increased version number for new table
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
@@ -45,20 +45,15 @@ class DatabaseHelper {
   }
 
   Future _onUpgrade(Database db, int oldVersion, int newVersion) async {
-  if (oldVersion < 4) {
-    // Check if the partner_code column exists
-    var tableInfo = await db.rawQuery('PRAGMA table_info(user_data)');
-    bool hasPartnerCode = tableInfo.any((column) => column['name'] == 'partner_code');
-    
-    if (!hasPartnerCode) {
-      // Add the partner_code column if it doesn't exist
-      await db.execute('ALTER TABLE user_data ADD COLUMN partner_code TEXT');
+    if (oldVersion < 5) {
+      await db.execute('''
+        CREATE TABLE settings (
+          key TEXT PRIMARY KEY,
+          value TEXT NOT NULL
+        )
+      ''');
     }
-    
-    // If the table doesn't exist at all, create it
-    await _createUserDataTable(db);
   }
-}
 
   // Separate method for creating the moods table
   Future _createMoodsTable(Database db) async {
@@ -103,48 +98,45 @@ class DatabaseHelper {
   }
 
   // Fixed storePartnerCode method
-Future<void> storePartnerCode(String code) async {
-    Database db = await instance.db;
-    
-    List<Map<String, dynamic>> existing = await db.query('user_data');
-    if (existing.isEmpty) {
-        // If no record exists, create new one with partner code
-        await db.insert('user_data', {'partner_code': code});
-    } else {
-        // If record exists, update it with partner code
-        await db.update(
-            'user_data',
-            {'partner_code': code},
-            where: 'id = ?',
-            whereArgs: [existing.first['id']],
-        );
-    }
-}
+  Future<void> storePartnerCode(String code) async {
+      Database db = await instance.db;
+      
+      List<Map<String, dynamic>> existing = await db.query('user_data');
+      if (existing.isEmpty) {
+          // If no record exists, create new one with partner code
+          await db.insert('user_data', {'partner_code': code});
+      } else {
+          // If record exists, update it with partner code
+          await db.update(
+              'user_data',
+              {'partner_code': code},
+              where: 'id = ?',
+              whereArgs: [existing.first['id']],
+          );
+      }
+  }
 
-// Fixed getPartnerCode method
-Future<String?> getPartnerCode() async {
-    Database db = await instance.db;
-    List<Map<String, dynamic>> results = await db.query('user_data');
-    if (results.isNotEmpty && results.first['partner_code'] != null) {
-        return results.first['partner_code'] as String;
-    }
-    return null;
-}
+  Future<String?> getPartnerCode() async {
+      Database db = await instance.db;
+      List<Map<String, dynamic>> results = await db.query('user_data');
+      if (results.isNotEmpty && results.first['partner_code'] != null) {
+          return results.first['partner_code'] as String;
+      }
+      return null;
+  }
 
-// Add method to clear partner code
-Future<void> clearPartnerCode() async {
-    Database db = await instance.db;
-    List<Map<String, dynamic>> existing = await db.query('user_data');
-    if (existing.isNotEmpty) {
-        await db.update(
-            'user_data',
-            {'partner_code': null},
-            where: 'id = ?',
-            whereArgs: [existing.first['id']],
-        );
-    }
-}
-
+  Future<void> clearPartnerCode() async {
+      Database db = await instance.db;
+      List<Map<String, dynamic>> existing = await db.query('user_data');
+      if (existing.isNotEmpty) {
+          await db.update(
+              'user_data',
+              {'partner_code': null},
+              where: 'id = ?',
+              whereArgs: [existing.first['id']],
+          );
+      }
+  }
 
   Future<int> addMood(int rating, String date) async {
     Database db = await instance.db;
@@ -222,11 +214,39 @@ Future<void> clearPartnerCode() async {
       whereArgs: [date],
     );
 
-    return result.isNotEmpty; // Returns true if there's a record for today
+    return result.isNotEmpty;
+  }
+
+  Future<void> storeColorPreference(bool isPink) async {
+    final db = await instance.db;
+    await db.insert(
+      'settings',
+      {'key': 'color_preference', 'value': isPink ? '1' : '0'},
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<bool> getColorPreference() async {
+    final db = await instance.db;
+    final List<Map<String, dynamic>> maps = await db.query(
+      'settings',
+      where: 'key = ?',
+      whereArgs: ['color_preference'],
+    );
+    return maps.isNotEmpty ? maps.first['value'] == '1' : false;
   }
 
 // CLOUD - Neon Postgres
-
+  Future<Connection> openConnection() async {
+    final conn = await Connection.open(Endpoint(
+          host: 'ep-yellow-truth-a5ebo559.us-east-2.aws.neon.tech',
+          database: 'voyagersdb',
+          username: 'voyageruser',
+          password: 'Sk3l3ton!sk3l3ton',
+        ));
+    return conn;
+  }
+  
   Future<void> createPartnerTable(String partnerCode, String userCode) async {
     String? currentPartnerCode = await getPartnerCode();
     if (partnerCode != currentPartnerCode) {
@@ -357,6 +377,69 @@ Future<void> clearPartnerCode() async {
       await conn.close();
     } catch (e) {
       print('Error in CloudAddMood: $e');
+      rethrow;
+    }
+  }
+
+  Future<Map<String, List<Map<String, dynamic>>>> getAllMoodData() async {
+    try {
+      // Get local moods
+      List<Map<String, dynamic>> userMoods = await queryAllMoods();
+      List<Map<String, dynamic>> partnerMoods = [];
+      
+      // Get partner code
+      String? partnerCode = await getPartnerCode();
+      String? userCode = await getUserCode();
+      
+      // If both codes exist, fetch partner data from PostgreSQL
+      if (partnerCode != null && userCode != null) {
+        try {
+          final conn = await openConnection();
+
+          // Try both possible table name combinations
+          String tableNameForward = '${partnerCode}_$userCode'.toLowerCase();
+          String tableNameReverse = '${userCode}_$partnerCode'.toLowerCase();
+          
+          // Check which table exists
+          final existingTables = await conn.execute('''
+            SELECT tablename 
+            FROM pg_catalog.pg_tables 
+            WHERE tablename IN ('$tableNameForward', '$tableNameReverse')
+          ''');
+
+          if (existingTables.isNotEmpty) {
+            String tableName = existingTables[0][0] as String;
+            
+            // Determine which column contains partner's mood based on table name
+            String partnerMoodColumn = '${partnerCode.toLowerCase()}_mood';
+
+            // Fetch partner's mood data
+            final results = await conn.execute(
+              'SELECT date, $partnerMoodColumn as rating FROM "$tableName" WHERE $partnerMoodColumn IS NOT NULL'
+            );
+
+            // Convert results to the same format as user moods
+            for (final row in results) {
+              partnerMoods.add({
+                'date': row[0],
+                'rating': int.parse(row[1] as String),
+              });
+            }
+          }
+          
+          await conn.close();
+        } catch (e) {
+          print('Error fetching partner mood data: $e');
+          // Don't rethrow - we'll just return empty partner moods
+        }
+      }
+
+      return {
+        'userMoods': userMoods,
+        'partnerMoods': partnerMoods,
+      };
+    } catch (e) {
+      print('Error in getAllMoodData: $e');
       rethrow;
     }
   }

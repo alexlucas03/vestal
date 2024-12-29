@@ -51,7 +51,7 @@ class MyApp extends StatelessWidget {
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
         useMaterial3: true,
         appBarTheme: const AppBarTheme(
-          backgroundColor: Color(0xFF7D9BFF),
+          backgroundColor: Color(0xFF3A4C7A),
           titleTextStyle: TextStyle(
             color: Colors.white,
             fontWeight: FontWeight.bold,
@@ -249,43 +249,54 @@ class MoodStats extends StatefulWidget {
 
 class _MoodStatsState extends State<MoodStats> {
   List<Map<String, dynamic>> _moods = [];
+  List<Map<String, dynamic>> _partnerMoods = [];
   String formattedDate = DateFormat('yyyyMMdd').format(DateTime.now());
   bool isMoodSubmitted = false;
+  bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
-    _checkMoodForToday();
+    _loadMoodData();
   }
 
-  void _checkMoodForToday() async {
-    List<Map<String, dynamic>> moodsFromDb = await DatabaseHelper.instance.queryAllMoods();
-
-    setState(() {
-      isMoodSubmitted = moodsFromDb.isNotEmpty;
-      _moods = moodsFromDb;
-    });
-  }
-
-  // Method to load all moods from the database
-  void _loadMoods() async {
-    List<Map<String, dynamic>> moodsFromDb = await DatabaseHelper.instance.queryAllMoods();
-    setState(() {
-      _moods = moodsFromDb; // Store the complete map with both rating and date
-    });
-  }
-
-  void _clearMoods() async {
-
-    // Clear all moods from the database
-    await DatabaseHelper.instance.clearDb();
-
-    // Reload the moods list after clearing
-    _loadMoods();
+  Future<void> _loadMoodData() async {
+    try {
+      // Get all mood data from DatabaseHelper
+      final allMoodData = await DatabaseHelper.instance.getAllMoodData();
+      
+      if (mounted) {
+        setState(() {
+          _moods = allMoodData['userMoods'] ?? [];
+          _partnerMoods = allMoodData['partnerMoods'] ?? [];
+          isMoodSubmitted = _moods.isNotEmpty;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          // Handle error state if needed
+        });
+      }
+      print('Error loading mood data: $e');
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    if (_isLoading) {
+      return Scaffold(
+        appBar: AppBar(
+          title: const Text('Mood Stats'),
+        ),
+        body: const Center(
+          child: CircularProgressIndicator(),
+        ),
+      );
+    }
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Mood Stats'),
@@ -298,29 +309,31 @@ class _MoodStatsState extends State<MoodStats> {
             isMoodSubmitted
                 ? Column(
                     children: [
-                      MoodLineChart(moodData: _moods),
+                      MoodLineChart(
+                        moodData: _moods,
+                        partnerMoodData: _partnerMoods.isNotEmpty ? _partnerMoods : null,
+                      ),
                       const SizedBox(height: 16),
                       ElevatedButton(
                         onPressed: () {
                           Navigator.push(
                             context,
-                            MaterialPageRoute(builder: (context) => MoodSliderPage(fromPage: 'MoodStats'),),
+                            MaterialPageRoute(
+                              builder: (context) => MoodSliderPage(fromPage: 'MoodStats'),
+                            ),
                           );
                         },
                         child: const Text('Rate Your Mood'),
                       ),
-                      // clear mood database button
-                      // ElevatedButton(
-                      //   onPressed: _clearMoods,
-                      //   child: const Text('Clear All Moods'),
-                      // ),
                     ],
                   )
                 : ElevatedButton(
                     onPressed: () {
                       Navigator.push(
                         context,
-                        MaterialPageRoute(builder: (context) => MoodSliderPage(fromPage: 'MoodStats'),),
+                        MaterialPageRoute(
+                          builder: (context) => MoodSliderPage(fromPage: 'MoodStats'),
+                        ),
                       );
                     },
                     child: const Text('Rate Your Mood to see your stats'),
@@ -618,6 +631,7 @@ class _SettingsPageState extends State<SettingsPage> {
   String? userCode;
   String? partnerCode;
   bool _isLoading = false;
+  bool _isPinkColor = false;
 
   @override
   void initState() {
@@ -631,10 +645,12 @@ class _SettingsPageState extends State<SettingsPage> {
     try {
       final code = await DatabaseHelper.instance.getUserCode();
       final pCode = await DatabaseHelper.instance.getPartnerCode();
+      final isPink = await DatabaseHelper.instance.getColorPreference();  // Add this line
       if (!mounted) return;
       setState(() {
         userCode = code;
         partnerCode = pCode;
+        _isPinkColor = isPink;  // Add this line
         _isLoading = false;
       });
     } catch (e) {
@@ -658,7 +674,7 @@ class _SettingsPageState extends State<SettingsPage> {
         return StatefulBuilder(
           builder: (context, setDialogState) {
             return AlertDialog(
-              title: const Text('Enter Partner Code'),
+              title: const Text('Enter Partner\'s Code'),
               content: TextField(
                 controller: dialogController,
                 maxLength: 6,
@@ -721,6 +737,10 @@ class _SettingsPageState extends State<SettingsPage> {
     });
   }
 
+  Future<void> _toggleColor() async {
+    setState(() => _isPinkColor = !_isPinkColor);
+    await DatabaseHelper.instance.storeColorPreference(_isPinkColor);
+  }
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -742,10 +762,26 @@ class _SettingsPageState extends State<SettingsPage> {
                   ),
                 ),
                 Text(
-                  'Partner Code: ${partnerCode ?? ''}',
+                  'Partner\'s Code: ${partnerCode?.toUpperCase() ?? ''}',
                   style: const TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: 16,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    minimumSize: const Size(double.infinity, 50),
+                    backgroundColor: _isPinkColor ? Colors.pink : const Color(0xFF3A4C7A),
+                    foregroundColor: Colors.white,
+                  ),
+                  onPressed: _toggleColor,
+                  label: Text(
+                    'Toggle User Color',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ),
                 const SizedBox(height: 16),
@@ -761,6 +797,7 @@ class _SettingsPageState extends State<SettingsPage> {
                     style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.bold,
+                      backgroundColor: Color(0xFF3A4C7A),
                     ),
                   ),
                 ),
