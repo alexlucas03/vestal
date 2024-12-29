@@ -228,90 +228,93 @@ Future<void> clearPartnerCode() async {
 // CLOUD - Neon Postgres
 
   Future<void> createPartnerTable(String partnerCode, String userCode) async {
-    try {
-      final conn = await Connection.open(Endpoint(
-        host: 'ep-yellow-truth-a5ebo559.us-east-2.aws.neon.tech',
-        database: 'voyagersdb',
-        username: 'voyageruser',
-        password: 'Sk3l3ton!sk3l3ton',
-      ));
+    String? currentPartnerCode = await getPartnerCode();
+    if (partnerCode != currentPartnerCode) {
+      try {
+        final conn = await Connection.open(Endpoint(
+          host: 'ep-yellow-truth-a5ebo559.us-east-2.aws.neon.tech',
+          database: 'voyagersdb',
+          username: 'voyageruser',
+          password: 'Sk3l3ton!sk3l3ton',
+        ));
 
-      // Generate both possible table name combinations
-      String tableNameForward = '${partnerCode}_$userCode'.toLowerCase();
-      String tableNameReverse = '${userCode}_$partnerCode'.toLowerCase();
-      
-      // Check if either table exists
-      final existingTables = await conn.execute('''
-        SELECT tablename 
-        FROM pg_catalog.pg_tables 
-        WHERE tablename IN ('$tableNameForward', '$tableNameReverse')
-      ''');
-
-      String finalTableName;
-      if (existingTables.isNotEmpty) {
-        // Use the existing table name if found
-        finalTableName = existingTables[0][0] as String;
-      } else {
-        // If no table exists, use the forward arrangement
-        finalTableName = tableNameForward;
+        // Generate both possible table name combinations
+        String tableNameForward = '${partnerCode}_$userCode'.toLowerCase();
+        String tableNameReverse = '${userCode}_$partnerCode'.toLowerCase();
         
-        // Create the new table with proper column definitions
-        await conn.execute('''
-          CREATE TABLE IF NOT EXISTS "$finalTableName" (
-            date TEXT,
-            ${partnerCode}_mood TEXT,
-            ${userCode}_mood TEXT
-          )
+        // Check if either table exists
+        final existingTables = await conn.execute('''
+          SELECT tablename 
+          FROM pg_catalog.pg_tables 
+          WHERE tablename IN ('$tableNameForward', '$tableNameReverse')
         ''');
-      }
 
-      // Clean up any other tables with this user code (except the one we're using)
-      await conn.execute('''
-        DO \$\$
-        DECLARE
-          _table text;
-        BEGIN
-          FOR _table IN 
-            SELECT tablename 
-            FROM pg_catalog.pg_tables 
-            WHERE tablename LIKE '%${userCode.toLowerCase()}%'
-            AND tablename != '$finalTableName'
-          LOOP
-            EXECUTE 'DROP TABLE IF EXISTS ' || quote_ident(_table);
-          END LOOP;
-        END \$\$;
-      ''');
-
-      Database sqliteDb = await instance.db;
-      List<Map<String, dynamic>> localMoods = await sqliteDb.query('moods');
-
-      // For each mood in SQLite, sync with PostgreSQL
-      for (var mood in localMoods) {
-        String moodDate = mood['date'].toString();
-        String moodRating = mood['rating'].toString();
-
-        // Check if the date already exists in PostgreSQL
-        final existingRow = await conn.execute(
-          'SELECT * FROM "$finalTableName" WHERE date = \'$moodDate\''
-        );
-
-        if (existingRow.isEmpty) {
-          // Insert new row if date doesn't exist
-          await conn.execute(
-            'INSERT INTO "$finalTableName" (date, ${userCode}_mood) VALUES (\'$moodDate\', \'$moodRating\')'
-          );
+        String finalTableName;
+        if (existingTables.isNotEmpty) {
+          // Use the existing table name if found
+          finalTableName = existingTables[0][0] as String;
         } else {
-          // Update existing row with user's mood
-          await conn.execute(
-            'UPDATE "$finalTableName" SET ${userCode}_mood = \'$moodRating\' WHERE date = \'$moodDate\''
-          );
+          // If no table exists, use the forward arrangement
+          finalTableName = tableNameForward;
+          
+          // Create the new table with proper column definitions
+          await conn.execute('''
+            CREATE TABLE IF NOT EXISTS "$finalTableName" (
+              date TEXT,
+              ${partnerCode}_mood TEXT,
+              ${userCode}_mood TEXT
+            )
+          ''');
         }
-      }
 
-      await conn.close();
-    } catch (e) {
-      print('Error in createPartnerTable: ${e.toString()}');
-      rethrow;
+        // Clean up any other tables with this user code (except the one we're using)
+        await conn.execute('''
+          DO \$\$
+          DECLARE
+            _table text;
+          BEGIN
+            FOR _table IN 
+              SELECT tablename 
+              FROM pg_catalog.pg_tables 
+              WHERE tablename LIKE '%${userCode.toLowerCase()}%'
+              AND tablename != '$finalTableName'
+            LOOP
+              EXECUTE 'DROP TABLE IF EXISTS ' || quote_ident(_table);
+            END LOOP;
+          END \$\$;
+        ''');
+
+        Database sqliteDb = await instance.db;
+        List<Map<String, dynamic>> localMoods = await sqliteDb.query('moods');
+
+        // For each mood in SQLite, sync with PostgreSQL
+        for (var mood in localMoods) {
+          String moodDate = mood['date'].toString();
+          String moodRating = mood['rating'].toString();
+
+          // Check if the date already exists in PostgreSQL
+          final existingRow = await conn.execute(
+            'SELECT * FROM "$finalTableName" WHERE date = \'$moodDate\''
+          );
+
+          if (existingRow.isEmpty) {
+            // Insert new row if date doesn't exist
+            await conn.execute(
+              'INSERT INTO "$finalTableName" (date, ${userCode}_mood) VALUES (\'$moodDate\', \'$moodRating\')'
+            );
+          } else {
+            // Update existing row with user's mood
+            await conn.execute(
+              'UPDATE "$finalTableName" SET ${userCode}_mood = \'$moodRating\' WHERE date = \'$moodDate\''
+            );
+          }
+        }
+
+        await conn.close();
+      } catch (e) {
+        print('Error in createPartnerTable: ${e.toString()}');
+        rethrow;
+      }
     }
   }
 
