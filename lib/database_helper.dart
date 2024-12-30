@@ -33,7 +33,7 @@ class DatabaseHelper {
     // Open database with onUpgrade callback
     return await openDatabase(
       path,
-      version: 5, // Increased version number for new table
+      version: 9, // Increased version number for new table
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
@@ -50,6 +50,38 @@ class DatabaseHelper {
         CREATE TABLE settings (
           key TEXT PRIMARY KEY,
           value TEXT NOT NULL
+        )
+      ''');
+    }
+    if (oldVersion < 6) {
+      await db.execute('''
+        CREATE TABLE moments (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          title TEXT,
+          date STRING,
+          status STRING,
+          description STRING,
+          feelings STRING,
+          ideal STRING,
+          intensity INTEGER
+        )
+      ''');
+    }
+
+    if (oldVersion < 9) {
+      await db.execute('''
+        DROP TABLE moments 
+      ''');
+      await db.execute('''
+        CREATE TABLE moments (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          title TEXT,
+          date TEXT,
+          status TEXT,
+          description TEXT,
+          feelings TEXT,
+          ideal TEXT,
+          intensity TEXT
         )
       ''');
     }
@@ -234,6 +266,57 @@ class DatabaseHelper {
       whereArgs: ['color_preference'],
     );
     return maps.isNotEmpty ? maps.first['value'] == '1' : false;
+  }
+
+  Future<List<Map<String, dynamic>>> queryAllMoments() async {
+  Database db = await instance.db;
+  try {
+    return await db.query('moments', orderBy: 'date DESC');
+  } catch (e) {
+    print('Error in queryAllMoments: $e');
+    throw e;
+  }
+}
+
+  Future<int> addMoment(String title, String date, String status, String description, 
+      String feelings, String ideal, String intensity) async {
+    Database db = await instance.db;
+    
+    return await db.insert('moments', {
+      'title': title,
+      'date': date,
+      'status': status,
+      'description': description,
+      'feelings': feelings,
+      'ideal': ideal,
+      'intensity': intensity,
+    });
+  }
+
+  Future<int> updateMoment(
+    int id,
+    String title, 
+    String status,
+    String description,
+    String feelings,
+    String ideal,
+    String intensity
+  ) async {
+    Database db = await instance.db;
+    
+    return await db.update(
+      'moments',
+      {
+        'title': title,
+        'status': status,
+        'description': description,
+        'feelings': feelings,
+        'ideal': ideal,
+        'intensity': intensity,
+      },
+      where: 'id = ?',
+      whereArgs: [id],
+    );
   }
 
 // CLOUD - Neon Postgres

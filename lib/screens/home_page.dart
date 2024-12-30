@@ -4,6 +4,7 @@ import '../widgets/starry_background.dart';
 import 'mood_stats.dart';
 import 'section_pages.dart';
 import 'settings_page.dart';
+import 'moments_page.dart';
 
 class MyHomePage extends StatefulWidget {
   const MyHomePage({super.key, required this.title});
@@ -162,7 +163,7 @@ class _MyHomePageState extends State<MyHomePage> with SingleTickerProviderStateM
       case 0:
         return const MoodStats();
       case 1:
-        return const SectionTwoPage();
+        return const MomentsPage();
       case 2:
         return const SectionThreePage();
       case 3:
