@@ -32,7 +32,12 @@ class ChartDisplay extends StatelessWidget {
           minY: 0,
           maxY: 10,
           lineBarsData: _buildLineBarsData(),
+          // Add these properties to disable animations
+          lineTouchData: LineTouchData(enabled: true),
+          showingTooltipIndicators: [],
         ),
+        duration: Duration.zero, // Disable the animation duration
+        curve: Curves.linear, // Use linear curve for instant transition
       ),
     );
   }
