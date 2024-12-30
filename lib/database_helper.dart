@@ -203,7 +203,7 @@ class DatabaseHelper {
 
   Future<int> clearDb() async {
     Database db = await instance.db;
-    await db.delete('user_data'); // Also clear user data when clearing DB
+    await db.delete('user_data');
     return await db.delete('moods');
   }
 
@@ -317,6 +317,14 @@ class DatabaseHelper {
       where: 'id = ?',
       whereArgs: [id],
     );
+  }
+
+  Future<void> removeMoment(int id) async {
+    Database db = await instance.db;
+    await db.execute('''
+      DELETE FROM moments 
+      WHERE id = $id
+    ''');
   }
 
 // CLOUD - Neon Postgres

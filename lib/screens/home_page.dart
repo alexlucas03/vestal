@@ -18,6 +18,8 @@ class MyHomePage extends StatefulWidget {
 class _MyHomePageState extends State<MyHomePage> with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   late List<Animation<double>> _angleAnimations;
+  
+  final List<String> sectionNames = ['Moods', 'Moments', 'Section 3', 'Section 4', 'Settings'];
 
   @override
   void initState() {
@@ -109,21 +111,10 @@ class _MyHomePageState extends State<MyHomePage> with SingleTickerProviderStateM
             return Positioned(
               top: y - (buttonSize / 2),
               left: x - (buttonSize / 2),
-              child: Container(
-                width: buttonSize,
-                height: buttonSize,
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(buttonSize / 2),
-                  border: Border.all(
-                    color: const Color(0xFF0A205A),
-                    width: 2,
-                  ),
-                ),
-                child: _buildSection(
-                  'Section ${i + 1}',
-                  _getPageForIndex(i),
-                ),
+              child: _buildSection(
+                sectionNames[i],
+                _getPageForIndex(i),
+                buttonSize,
               ),
             );
           },
@@ -134,24 +125,34 @@ class _MyHomePageState extends State<MyHomePage> with SingleTickerProviderStateM
     return buttons;
   }
 
-  Widget _buildSection(String title, Widget page) {
-    return Builder(
-      builder: (context) => GestureDetector(
-        onTap: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (context) => page),
-          );
-        },
-        child: Center(
-          child: Text(
-            title,
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.bold,
-              color: Colors.white,
-            ),
+  Widget _buildSection(String title, Widget page, double buttonSize) {
+    return ElevatedButton(
+      onPressed: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => page),
+        );
+      },
+      style: ElevatedButton.styleFrom(
+        backgroundColor: Colors.white,
+        foregroundColor: Colors.white,
+        padding: EdgeInsets.zero,
+        fixedSize: Size(buttonSize, buttonSize),
+        shape: CircleBorder(
+          side: BorderSide(
+            color: const Color(0xFF0A205A),
+            width: 2,
+          ),
+        ),
+      ),
+      child: Center(
+        child: Text(
+          title,
+          textAlign: TextAlign.center,
+          style: const TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.bold,
+            color: Colors.black,
           ),
         ),
       ),

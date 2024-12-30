@@ -108,16 +108,8 @@ class _MoodSliderPageState extends State<MoodSliderPage> with SingleTickerProvid
       }
 
       // Navigate back to the correct page based on 'fromPage' parameter
-      if (widget.fromPage == 'MoodStats') {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (context) => const MoodStats()),
-        );
-      } else {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (context) => const MyHomePage(title: 'Voyagers')),
-        );
+      if (mounted) {
+        Navigator.pop(context, true);
       }
     } catch (error) {
       // Handle any errors that occurred during mood submission
@@ -131,16 +123,8 @@ class _MoodSliderPageState extends State<MoodSliderPage> with SingleTickerProvid
 
   // No mood action (back to the previous screen)
   void _noMood() async {
-    if (widget.fromPage == 'MoodStats') {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (context) => const MoodStats()),
-      );
-    } else {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (context) => const MyHomePage(title: 'Voyagers')),
-      );
+    if (mounted) {
+      Navigator.pop(context, true);
     }
   }
 

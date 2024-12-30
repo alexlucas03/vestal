@@ -136,11 +136,11 @@ class _MomentsPageState extends State<MomentsPage> {
                     },
                   ),
             ),
-            const SizedBox(height: 16),
             ElevatedButton(
               onPressed: () => _navigateToAddMoment(),
-              child: const Text('Add New Moment'),
+              child: const Text('Add Moment'),
             ),
+            const SizedBox(height: 32),
           ],
         ),
       ),

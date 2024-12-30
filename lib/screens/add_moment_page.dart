@@ -15,6 +15,7 @@ class AddMomentPage extends StatefulWidget {
 class _AddMomentPageState extends State<AddMomentPage> {
   final _formKey = GlobalKey<FormState>();
   final _titleController = TextEditingController();
+  String _status = 'Open';
   final _descriptionController = TextEditingController();
   final _feelingsController = TextEditingController();
   final _idealController = TextEditingController();
@@ -28,8 +29,8 @@ class _AddMomentPageState extends State<AddMomentPage> {
       _descriptionController.text = widget.moment!.description;
       _feelingsController.text = widget.moment!.feelings;
       _idealController.text = widget.moment!.ideal;
-      // Safely parse the intensity string to int
-      _intensity = int.tryParse(widget.moment!.intensity) ?? 5;
+      _status = widget.moment!.status[0].toUpperCase() + widget.moment!.status.substring(1);
+      _intensity = int.parse(widget.moment!.intensity);
     }
   }
 
@@ -43,7 +44,7 @@ class _AddMomentPageState extends State<AddMomentPage> {
           await DatabaseHelper.instance.updateMoment(
             widget.moment!.id!,
             _titleController.text,
-            widget.moment!.status,
+            _status.toLowerCase(),
             _descriptionController.text,
             _feelingsController.text,
             _idealController.text,
@@ -76,6 +77,25 @@ class _AddMomentPageState extends State<AddMomentPage> {
     }
   }
 
+  Future<void> _removeMoment() async {
+    if (_formKey.currentState!.validate()) {
+      try {
+        await DatabaseHelper.instance.removeMoment(widget.moment!.id!);
+
+        if (mounted) {
+          Navigator.pop(context, true);
+        }
+      } catch (e) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(e.toString()),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
   @override
   void dispose() {
     _titleController.dispose();
@@ -90,6 +110,14 @@ class _AddMomentPageState extends State<AddMomentPage> {
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.moment != null ? 'Edit Moment' : 'Add Moment'),
+        actions: [
+          if (widget.moment != null)
+            IconButton(
+              icon: const Icon(Icons.delete),
+              onPressed: _removeMoment,
+              color: Colors.white,
+            )
+        ],
       ),
       // Rest of the build method remains the same
       body: Stack(
@@ -123,6 +151,38 @@ class _AddMomentPageState extends State<AddMomentPage> {
                     },
                   ),
                   const SizedBox(height: 16),
+                  if (widget.moment != null)
+                    DropdownButtonFormField<String>(
+                      value: _status,
+                      decoration: const InputDecoration(
+                        labelText: 'Status',
+                        border: OutlineInputBorder(),
+                      ),
+                      items: const [
+                        DropdownMenuItem<String>(
+                          value: 'Open',
+                          child: Text('Open'),
+                        ),
+                        DropdownMenuItem<String>(
+                          value: 'Closed',
+                          child: Text('Closed'),
+                        ),
+                      ],
+                      onChanged: (String? newValue) {
+                        if (newValue != null) {
+                          setState(() {
+                            _status = newValue;
+                          });
+                        }
+                      },
+                      validator: (value) {
+                        if (value == null) {
+                          return 'Please select a status';
+                        }
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: 16),
                   TextFormField(
                     controller: _descriptionController,
                     decoration: const InputDecoration(
