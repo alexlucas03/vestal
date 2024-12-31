@@ -7,6 +7,7 @@ class Moment {
   final String feelings;
   final String ideal;
   final String intensity;
+  final String type;
 
   Moment({
     this.id,
@@ -17,6 +18,7 @@ class Moment {
     required this.feelings,
     required this.ideal,
     required this.intensity,
+    required this.type,
   });
 
   factory Moment.fromMap(Map<String, dynamic> map) {
@@ -29,6 +31,7 @@ class Moment {
       feelings: map['feelings'] ?? '',
       ideal: map['ideal'] ?? '',
       intensity: map['intensity']?.toString() ?? '',
+      type: map['type']?.toString() ?? '',
     );
   }
 }

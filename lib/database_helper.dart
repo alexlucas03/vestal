@@ -33,7 +33,7 @@ class DatabaseHelper {
     // Open database with onUpgrade callback
     return await openDatabase(
       path,
-      version: 9, // Increased version number for new table
+      version: 10, // Increased version number for new table
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
@@ -84,6 +84,42 @@ class DatabaseHelper {
           intensity TEXT
         )
       ''');
+    }
+
+    if (oldVersion < 10) {
+      await db.execute('''
+        ALTER TABLE moments
+        ADD COLUMN type TEXT
+      ''');
+    }
+
+    if (oldVersion < 11) {
+      // We need to recreate the table to modify column constraints
+      await db.execute('ALTER TABLE moments RENAME TO moments_old');
+      
+      await db.execute('''
+        CREATE TABLE moments (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          title TEXT NOT NULL,
+          date TEXT NOT NULL,
+          status TEXT NOT NULL,
+          description TEXT DEFAULT NULL,
+          feelings TEXT DEFAULT NULL,
+          ideal TEXT DEFAULT NULL,
+          intensity TEXT DEFAULT NULL,
+          type TEXT NOT NULL DEFAULT 'good'
+        )
+      ''');
+
+      // Copy data from old table to new table
+      await db.execute('''
+        INSERT INTO moments (id, title, date, status, description, feelings, ideal, intensity, type)
+        SELECT id, title, date, status, description, feelings, ideal, intensity, type
+        FROM moments_old
+      ''');
+
+      // Drop the old table
+      await db.execute('DROP TABLE moments_old');
     }
   }
 
@@ -279,17 +315,18 @@ class DatabaseHelper {
 }
 
   Future<int> addMoment(String title, String date, String status, String description, 
-      String feelings, String ideal, String intensity) async {
+      String feelings, String ideal, String intensity, String type) async {
     Database db = await instance.db;
     
     return await db.insert('moments', {
       'title': title,
       'date': date,
       'status': status,
-      'description': description,
-      'feelings': feelings,
-      'ideal': ideal,
-      'intensity': intensity,
+      'description': description.isEmpty ? null : description,
+      'feelings': feelings.isEmpty ? null : feelings,
+      'ideal': ideal.isEmpty ? null : ideal,
+      'intensity': intensity.isEmpty ? null : intensity,
+      'type': type,
     });
   }
 
@@ -309,10 +346,10 @@ class DatabaseHelper {
       {
         'title': title,
         'status': status,
-        'description': description,
-        'feelings': feelings,
-        'ideal': ideal,
-        'intensity': intensity,
+        'description': description.isEmpty ? null : description,
+        'feelings': feelings.isEmpty ? null : feelings,
+        'ideal': ideal.isEmpty ? null : ideal,
+        'intensity': intensity.isEmpty ? null : intensity,
       },
       where: 'id = ?',
       whereArgs: [id],

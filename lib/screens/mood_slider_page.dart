@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../database_helper.dart';
-import 'home_page.dart';
-import 'mood_stats.dart';
 
 class MoodSliderPage extends StatefulWidget {
   final String fromPage;

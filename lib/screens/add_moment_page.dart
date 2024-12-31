@@ -16,10 +16,11 @@ class _AddMomentPageState extends State<AddMomentPage> {
   final _formKey = GlobalKey<FormState>();
   final _titleController = TextEditingController();
   String _status = 'Open';
+  String _type = 'good';
   final _descriptionController = TextEditingController();
   final _feelingsController = TextEditingController();
   final _idealController = TextEditingController();
-  int _intensity = 5;
+  int? _intensity;
 
   @override
   void initState() {
@@ -30,7 +31,8 @@ class _AddMomentPageState extends State<AddMomentPage> {
       _feelingsController.text = widget.moment!.feelings;
       _idealController.text = widget.moment!.ideal;
       _status = widget.moment!.status[0].toUpperCase() + widget.moment!.status.substring(1);
-      _intensity = int.parse(widget.moment!.intensity);
+      _intensity = widget.moment!.intensity.isEmpty ? null : int.parse(widget.moment!.intensity);
+      _type = widget.moment!.type;
     }
   }
 
@@ -48,7 +50,7 @@ class _AddMomentPageState extends State<AddMomentPage> {
             _descriptionController.text,
             _feelingsController.text,
             _idealController.text,
-            _intensity.toString(),
+            _intensity?.toString() ?? '',
           );
         } else {
           // Add new moment
@@ -59,7 +61,8 @@ class _AddMomentPageState extends State<AddMomentPage> {
             _descriptionController.text,
             _feelingsController.text,
             _idealController.text,
-            _intensity.toString(),
+            _intensity?.toString() ?? '',
+            _type,
           );
         }
 
@@ -78,7 +81,7 @@ class _AddMomentPageState extends State<AddMomentPage> {
   }
 
   Future<void> _removeMoment() async {
-    if (_formKey.currentState!.validate()) {
+    if (widget.moment != null) {
       try {
         await DatabaseHelper.instance.removeMoment(widget.moment!.id!);
 
@@ -107,6 +110,8 @@ class _AddMomentPageState extends State<AddMomentPage> {
 
   @override
   Widget build(BuildContext context) {
+    final bool isGoodMoment = widget.moment?.type == 'good' || (widget.moment?.type != null && _type == 'good');
+
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.moment != null ? 'Edit Moment' : 'Add Moment'),
@@ -119,7 +124,6 @@ class _AddMomentPageState extends State<AddMomentPage> {
             )
         ],
       ),
-      // Rest of the build method remains the same
       body: Stack(
         children: [
           SingleChildScrollView(
@@ -137,7 +141,7 @@ class _AddMomentPageState extends State<AddMomentPage> {
                   TextFormField(
                     controller: _titleController,
                     decoration: const InputDecoration(
-                      labelText: 'Title',
+                      labelText: 'Title*',
                       border: OutlineInputBorder(),
                       alignLabelWithHint: true,
                     ),
@@ -151,11 +155,44 @@ class _AddMomentPageState extends State<AddMomentPage> {
                     },
                   ),
                   const SizedBox(height: 16),
-                  if (widget.moment != null)
+                  if (widget.moment == null) ...[
+                    DropdownButtonFormField<String>(
+                      value: _type,
+                      decoration: const InputDecoration(
+                        labelText: 'Type*',
+                        border: OutlineInputBorder(),
+                      ),
+                      items: const [
+                        DropdownMenuItem<String>(
+                          value: 'good',
+                          child: Text('Good'),
+                        ),
+                        DropdownMenuItem<String>(
+                          value: 'bad',
+                          child: Text('Bad'),
+                        ),
+                      ],
+                      onChanged: (String? newValue) {
+                        if (newValue != null) {
+                          setState(() {
+                            _type = newValue;
+                          });
+                        }
+                      },
+                      validator: (value) {
+                        if (value == null) {
+                          return 'Please select a type';
+                        }
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+                  if (!isGoodMoment && _type.toLowerCase() != 'good') 
                     DropdownButtonFormField<String>(
                       value: _status,
                       decoration: const InputDecoration(
-                        labelText: 'Status',
+                        labelText: 'Status*',
                         border: OutlineInputBorder(),
                       ),
                       items: const [
@@ -182,6 +219,7 @@ class _AddMomentPageState extends State<AddMomentPage> {
                         return null;
                       },
                     ),
+                  if (!isGoodMoment && _type.toLowerCase() != 'good') 
                     const SizedBox(height: 16),
                   TextFormField(
                     controller: _descriptionController,
@@ -193,12 +231,6 @@ class _AddMomentPageState extends State<AddMomentPage> {
                     maxLines: null,
                     minLines: 3,
                     keyboardType: TextInputType.multiline,
-                    validator: (value) {
-                      if (value == null || value.isEmpty) {
-                        return 'Please enter a description';
-                      }
-                      return null;
-                    },
                   ),
                   const SizedBox(height: 16),
                   TextFormField(
@@ -211,12 +243,6 @@ class _AddMomentPageState extends State<AddMomentPage> {
                     maxLines: null,
                     minLines: 2,
                     keyboardType: TextInputType.multiline,
-                    validator: (value) {
-                      if (value == null || value.isEmpty) {
-                        return 'Please enter your feelings';
-                      }
-                      return null;
-                    },
                   ),
                   const SizedBox(height: 16),
                   TextFormField(
@@ -229,39 +255,31 @@ class _AddMomentPageState extends State<AddMomentPage> {
                     maxLines: null,
                     minLines: 2,
                     keyboardType: TextInputType.multiline,
-                    validator: (value) {
-                      if (value == null || value.isEmpty) {
-                        return 'Please enter the ideal outcome';
-                      }
-                      return null;
-                    },
                   ),
                   const SizedBox(height: 16),
-                  DropdownButtonFormField<int>(
+                  DropdownButtonFormField<int?>(
                     value: _intensity,
                     decoration: const InputDecoration(
                       labelText: 'Intensity',
                       border: OutlineInputBorder(),
                     ),
-                    items: List.generate(10, (index) => index + 1)
-                        .map((int value) {
-                      return DropdownMenuItem<int>(
-                        value: value,
-                        child: Text(value.toString()),
-                      );
-                    }).toList(),
+                    items: [
+                      const DropdownMenuItem<int?>(
+                        value: null,
+                        child: Text('Not specified'),
+                      ),
+                      ...List.generate(10, (index) => index + 1)
+                          .map((int value) {
+                        return DropdownMenuItem<int?>(
+                          value: value,
+                          child: Text(value.toString()),
+                        );
+                      }).toList(),
+                    ],
                     onChanged: (int? newValue) {
-                      if (newValue != null) {
-                        setState(() {
-                          _intensity = newValue;
-                        });
-                      }
-                    },
-                    validator: (value) {
-                      if (value == null) {
-                        return 'Please select an intensity level';
-                      }
-                      return null;
+                      setState(() {
+                        _intensity = newValue;
+                      });
                     },
                   ),
                   const SizedBox(height: 16),
