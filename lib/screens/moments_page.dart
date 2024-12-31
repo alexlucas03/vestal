@@ -159,7 +159,7 @@ class _MomentsPageState extends State<MomentsPage> with SingleTickerProviderStat
         title: const Text('Moments Journal'),
       ),
       body: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8.0),
+        padding: const EdgeInsets.all(8.0),
         child: Column(
           children: [
             Expanded(
@@ -216,7 +216,6 @@ class _MomentsPageState extends State<MomentsPage> with SingleTickerProviderStat
                           sizeFactor: _animation,
                           axisAlignment: -1.0,
                           child: Container(
-                            margin: const EdgeInsets.symmetric(horizontal: 8.0),
                             clipBehavior: Clip.none,
                             child: Column(
                               children: _archivedMoments.map(
