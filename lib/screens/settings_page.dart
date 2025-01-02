@@ -26,12 +26,12 @@ class _SettingsPageState extends State<SettingsPage> {
     try {
       final code = await DatabaseHelper.instance.getUserCode();
       final pCode = await DatabaseHelper.instance.getPartnerCode();
-      final isPink = await DatabaseHelper.instance.getColorPreference();  // Add this line
+      final isPink = await DatabaseHelper.instance.getColorPreference();
       if (!mounted) return;
       setState(() {
         userCode = code;
         partnerCode = pCode;
-        _isPinkColor = isPink;  // Add this line
+        _isPinkColor = isPink;
         _isLoading = false;
       });
     } catch (e) {
@@ -40,29 +40,54 @@ class _SettingsPageState extends State<SettingsPage> {
     }
   }
 
-  Future<void> _createPartnerTable(String partnerCode, String userCode) async {
-    await DatabaseHelper.instance.createPartnerTable(partnerCode, userCode);
+  Future<void> _createPartnerTable(String partnerCode, String userCode, bool shareAll) async {
+    await DatabaseHelper.instance.createPartnerTable(partnerCode, userCode, shareAll);
   }
 
   void _showPartnerCodeDialog(BuildContext context) {
-    // Create a StatefulBuilder to manage dialog state
     showDialog(
       context: context,
       barrierDismissible: false,
       builder: (BuildContext dialogContext) {
         final TextEditingController dialogController = TextEditingController();
+        String shareOption = 'Share all'; // Default value
 
         return StatefulBuilder(
           builder: (context, setDialogState) {
             return AlertDialog(
               title: const Text('Enter Partner\'s Code'),
-              content: TextField(
-                controller: dialogController,
-                maxLength: 6,
-                decoration: const InputDecoration(
-                  hintText: 'Enter 6-digit code',
-                  border: OutlineInputBorder(),
-                ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: dialogController,
+                    maxLength: 6,
+                    decoration: const InputDecoration(
+                      hintText: 'Enter 6-digit code',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  DropdownButton<String>(
+                    value: shareOption,
+                    isExpanded: true,
+                    items: const [
+                      DropdownMenuItem(
+                        value: 'Share all',
+                        child: Text('Share all'),
+                      ),
+                      DropdownMenuItem(
+                        value: 'Start now',
+                        child: Text('Start now'),
+                      ),
+                    ],
+                    onChanged: (String? newValue) {
+                      setDialogState(() {
+                        shareOption = newValue!;
+                      });
+                    },
+                  ),
+                ],
               ),
               actions: [
                 TextButton(
@@ -83,7 +108,7 @@ class _SettingsPageState extends State<SettingsPage> {
                         final userCode = await DatabaseHelper.instance.getUserCode();
                         if (userCode != null) {
                           // Create partner table with the submitted code and user code
-                          await _createPartnerTable(code, userCode);
+                          await _createPartnerTable(code, userCode, shareOption == 'Share all');
                         }
                         
                         Navigator.of(dialogContext).pop();
@@ -122,6 +147,7 @@ class _SettingsPageState extends State<SettingsPage> {
     setState(() => _isPinkColor = !_isPinkColor);
     await DatabaseHelper.instance.storeColorPreference(_isPinkColor);
   }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(

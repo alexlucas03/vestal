@@ -375,94 +375,98 @@ class DatabaseHelper {
     return conn;
   }
   
-  Future<void> createPartnerTable(String partnerCode, String userCode) async {
-    String? currentPartnerCode = await getPartnerCode();
-    if (partnerCode != currentPartnerCode) {
-      try {
-        final conn = await Connection.open(Endpoint(
-          host: 'ep-yellow-truth-a5ebo559.us-east-2.aws.neon.tech',
-          database: 'voyagersdb',
-          username: 'voyageruser',
-          password: 'Sk3l3ton!sk3l3ton',
-        ));
+  Future<void> createPartnerTable(String partnerCode, String userCode, bool shareAll) async {
+    try {
+      final conn = await Connection.open(Endpoint(
+        host: 'ep-yellow-truth-a5ebo559.us-east-2.aws.neon.tech',
+        database: 'voyagersdb',
+        username: 'voyageruser',
+        password: 'Sk3l3ton!sk3l3ton',
+      ));
 
-        // Generate both possible table name combinations
-        String tableNameForward = '${partnerCode}_$userCode'.toLowerCase();
-        String tableNameReverse = '${userCode}_$partnerCode'.toLowerCase();
+      // Generate both possible table name combinations
+      String moodTableNameForward = '${partnerCode}_${userCode}_moods'.toLowerCase();
+      String moodTableNameReverse = '${userCode}_${partnerCode}_moods'.toLowerCase();
+      
+      // Check if either table exists
+      final existingTables = await conn.execute('''
+        SELECT tablename 
+        FROM pg_catalog.pg_tables 
+        WHERE tablename IN ('$moodTableNameForward', '$moodTableNameReverse')
+      ''');
+
+      String finalMoodTableName;
+      if (existingTables.isNotEmpty) {
+        // Use the existing table name if found
+        finalMoodTableName = existingTables[0][0] as String;
+      } else {
+        // If no table exists, use the forward arrangement
+        finalMoodTableName = moodTableNameForward;
         
-        // Check if either table exists
-        final existingTables = await conn.execute('''
-          SELECT tablename 
-          FROM pg_catalog.pg_tables 
-          WHERE tablename IN ('$tableNameForward', '$tableNameReverse')
-        ''');
-
-        String finalTableName;
-        if (existingTables.isNotEmpty) {
-          // Use the existing table name if found
-          finalTableName = existingTables[0][0] as String;
-        } else {
-          // If no table exists, use the forward arrangement
-          finalTableName = tableNameForward;
-          
-          // Create the new table with proper column definitions
-          await conn.execute('''
-            CREATE TABLE IF NOT EXISTS "$finalTableName" (
-              date TEXT,
-              ${partnerCode}_mood TEXT,
-              ${userCode}_mood TEXT
-            )
-          ''');
-        }
-
-        // Clean up any other tables with this user code (except the one we're using)
+        // Create the new table with proper column definitions
         await conn.execute('''
-          DO \$\$
-          DECLARE
-            _table text;
-          BEGIN
-            FOR _table IN 
-              SELECT tablename 
-              FROM pg_catalog.pg_tables 
-              WHERE tablename LIKE '%${userCode.toLowerCase()}%'
-              AND tablename != '$finalTableName'
-            LOOP
-              EXECUTE 'DROP TABLE IF EXISTS ' || quote_ident(_table);
-            END LOOP;
-          END \$\$;
+          CREATE TABLE IF NOT EXISTS "$finalMoodTableName" (
+            date TEXT,
+            "${partnerCode.toLowerCase()}_mood" TEXT,
+            "${userCode.toLowerCase()}_mood" TEXT
+          )
         ''');
+      }
 
-        Database sqliteDb = await instance.db;
-        List<Map<String, dynamic>> localMoods = await sqliteDb.query('moods');
+      // Clean up any other tables with this user code (except the one we're using)
+      await conn.execute('''
+        DO \$\$
+        DECLARE
+          _table text;
+        BEGIN
+          FOR _table IN 
+            SELECT tablename 
+            FROM pg_catalog.pg_tables 
+            WHERE tablename LIKE '%${userCode.toLowerCase()}%'
+            AND tablename != '$finalMoodTableName'
+          LOOP
+            EXECUTE 'DROP TABLE IF EXISTS ' || quote_ident(_table);
+          END LOOP;
+        END \$\$;
+      ''');
 
-        // For each mood in SQLite, sync with PostgreSQL
-        for (var mood in localMoods) {
-          String moodDate = mood['date'].toString();
-          String moodRating = mood['rating'].toString();
+      Database sqliteDb = await instance.db;
+      List<Map<String, dynamic>> localMoods = await sqliteDb.query('moods');
 
-          // Check if the date already exists in PostgreSQL
-          final existingRow = await conn.execute(
-            'SELECT * FROM "$finalTableName" WHERE date = \'$moodDate\''
-          );
+      // For each mood in SQLite, sync with PostgreSQL
+      for (var mood in localMoods) {
+        String moodDate = mood['date'].toString();
+        String moodRating = mood['rating'].toString();
 
+        // Check if the date already exists in PostgreSQL
+        final existingRow = await conn.execute(
+          'SELECT * FROM "$finalMoodTableName" WHERE date = \'$moodDate\''
+        );
+
+        final today = DateTime.now();
+        final todayInt = int.parse('${today.year}${today.month.toString().padLeft(2, '0')}${today.day.toString().padLeft(2, '0')}');
+        final moodDateInt = int.parse(moodDate);
+
+        // Your condition
+        if (shareAll || moodDateInt >= todayInt) {
           if (existingRow.isEmpty) {
             // Insert new row if date doesn't exist
             await conn.execute(
-              'INSERT INTO "$finalTableName" (date, ${userCode}_mood) VALUES (\'$moodDate\', \'$moodRating\')'
+              'INSERT INTO "$finalMoodTableName" (date, "${userCode.toLowerCase()}_mood") VALUES (\'$moodDate\', \'$moodRating\')'
             );
           } else {
             // Update existing row with user's mood
             await conn.execute(
-              'UPDATE "$finalTableName" SET ${userCode}_mood = \'$moodRating\' WHERE date = \'$moodDate\''
+              'UPDATE "$finalMoodTableName" SET "${userCode.toLowerCase()}_mood" = \'$moodRating\' WHERE date = \'$moodDate\''
             );
           }
         }
-
-        await conn.close();
-      } catch (e) {
-        print('Error in createPartnerTable: ${e.toString()}');
-        rethrow;
       }
+
+      await conn.close();
+    } catch (e) {
+      print('Error in createPartnerTable: ${e.toString()}');
+      rethrow;
     }
   }
 
@@ -476,16 +480,16 @@ class DatabaseHelper {
 
     try {
       // First, find tables matching the user code
-      final tableResult = await conn.execute(
+      final moodTableResult = await conn.execute(
         'SELECT tablename FROM pg_catalog.pg_tables WHERE tablename LIKE \'%${userCode.toLowerCase()}%\''
       );
 
-      if (tableResult.isNotEmpty) {
-        final tableName = tableResult[0][0] as String;
+      if (moodTableResult.isNotEmpty) {
+        final moodTableName = moodTableResult[0][0] as String;
         
         // Check if a row exists with the given date
         final existingRow = await conn.execute(
-          'SELECT * FROM "$tableName" WHERE date = \'$date\''
+          'SELECT * FROM "$moodTableName" WHERE date = \'$date\''
         );
 
         String ratingStr = rating.toString();
@@ -493,12 +497,12 @@ class DatabaseHelper {
         if (existingRow.isNotEmpty) {
           // Update existing row
           await conn.execute(
-            'UPDATE "$tableName" SET ${userCode}_mood = \'$ratingStr\' WHERE date = \'$date\''
+            'UPDATE "$moodTableName" SET ${userCode}_mood = \'$ratingStr\' WHERE date = \'$date\''
           );
         } else {
           // Insert new row if it doesn't exist
           await conn.execute(
-            'INSERT INTO "$tableName" (date, ${userCode}_mood) VALUES (\'$date\', \'$ratingStr\')'
+            'INSERT INTO "$moodTableName" (date, ${userCode}_mood) VALUES (\'$date\', \'$ratingStr\')'
           );
         }
       }
@@ -525,25 +529,25 @@ class DatabaseHelper {
           final conn = await openConnection();
 
           // Try both possible table name combinations
-          String tableNameForward = '${partnerCode}_$userCode'.toLowerCase();
-          String tableNameReverse = '${userCode}_$partnerCode'.toLowerCase();
+          String moodTableNameForward = '${partnerCode}_${userCode}_moods'.toLowerCase();
+          String moodTableNameReverse = '${userCode}_${partnerCode}_moods'.toLowerCase();
           
           // Check which table exists
           final existingTables = await conn.execute('''
             SELECT tablename 
             FROM pg_catalog.pg_tables 
-            WHERE tablename IN ('$tableNameForward', '$tableNameReverse')
+            WHERE tablename IN ('$moodTableNameForward', '$moodTableNameReverse')
           ''');
 
           if (existingTables.isNotEmpty) {
-            String tableName = existingTables[0][0] as String;
+            String moodTableName = existingTables[0][0] as String;
             
             // Determine which column contains partner's mood based on table name
             String partnerMoodColumn = '${partnerCode.toLowerCase()}_mood';
 
             // Fetch partner's mood data
             final results = await conn.execute(
-              'SELECT date, $partnerMoodColumn as rating FROM "$tableName" WHERE $partnerMoodColumn IS NOT NULL'
+              'SELECT date, $partnerMoodColumn as rating FROM "$moodTableName" WHERE $partnerMoodColumn IS NOT NULL'
             );
 
             // Convert results to the same format as user moods
