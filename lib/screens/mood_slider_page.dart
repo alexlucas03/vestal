@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:voyagers/screens/home_page.dart';
 import '../database_helper.dart';
 
 class MoodSliderPage extends StatefulWidget {
@@ -105,9 +106,17 @@ class _MoodSliderPageState extends State<MoodSliderPage> with SingleTickerProvid
         }
       }
 
-      // Navigate back to the correct page based on 'fromPage' parameter
       if (mounted) {
-        Navigator.pop(context, true);
+        if (Navigator.canPop(context)) {
+          Navigator.pop(context, true);
+        } else {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => MyHomePage(title: 'Voyagers'),
+            ),
+          );  // Navigate to homepage
+        }
       }
     } catch (error) {
       // Handle any errors that occurred during mood submission
@@ -122,7 +131,16 @@ class _MoodSliderPageState extends State<MoodSliderPage> with SingleTickerProvid
   // No mood action (back to the previous screen)
   void _noMood() async {
     if (mounted) {
-      Navigator.pop(context, true);
+      if (Navigator.canPop(context)) {
+        Navigator.pop(context, true);
+      } else {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => MyHomePage(title: 'Voyagers'),
+          ),
+        );  // Navigate to homepage
+      }
     }
   }
 

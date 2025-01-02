@@ -98,6 +98,25 @@ class _AddMomentPageState extends State<AddMomentPage> {
       }
     }
   }
+  // TODO
+  Future<void> _sendMoment() async {
+    if (widget.moment != null) {
+      try {
+        await DatabaseHelper.instance.removeMoment(widget.moment!.id!);
+
+        if (mounted) {
+          Navigator.pop(context, true);
+        }
+      } catch (e) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(e.toString()),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
 
   @override
   void dispose() {
@@ -114,12 +133,19 @@ class _AddMomentPageState extends State<AddMomentPage> {
 
     return Scaffold(
       appBar: AppBar(
+        centerTitle: true,
         title: Text(widget.moment != null ? 'Edit Moment' : 'Add Moment'),
         actions: [
           if (widget.moment != null)
             IconButton(
-              icon: const Icon(Icons.delete),
+              icon: const Icon(Icons.send_rounded),
               onPressed: _removeMoment,
+              color: Colors.white,
+            ),
+          if (widget.moment != null)
+            IconButton(
+              icon: const Icon(Icons.delete),
+              onPressed: _sendMoment,
               color: Colors.white,
             )
         ],
