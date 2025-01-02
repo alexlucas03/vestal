@@ -5,6 +5,7 @@ import 'package:sqflite/sqflite.dart';
 import 'mood.dart';
 import 'dart:io';
 import 'package:postgres/postgres.dart';
+import '/widgets/models/moment.dart';
 
 class DatabaseHelper {
   static final DatabaseHelper instance = DatabaseHelper._instance();
@@ -33,7 +34,7 @@ class DatabaseHelper {
     // Open database with onUpgrade callback
     return await openDatabase(
       path,
-      version: 10, // Increased version number for new table
+      version: 12, // Increased version number for new table
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
@@ -120,6 +121,13 @@ class DatabaseHelper {
 
       // Drop the old table
       await db.execute('DROP TABLE moments_old');
+    }
+
+    if (oldVersion < 12) {
+      await db.execute('''
+        ALTER TABLE moments
+        ADD COLUMN owner TEXT
+      ''');
     }
   }
 
@@ -251,7 +259,6 @@ class DatabaseHelper {
     await _createUserDataTable(db);
   }
 
-  // Close the database
   Future<void> close() async {
     if (_database != null) {
       await _database!.close();
@@ -317,6 +324,7 @@ class DatabaseHelper {
   Future<int> addMoment(String title, String date, String status, String description, 
       String feelings, String ideal, String intensity, String type) async {
     Database db = await instance.db;
+    String? userCode = await getUserCode();  // Add await here
     
     return await db.insert('moments', {
       'title': title,
@@ -327,6 +335,7 @@ class DatabaseHelper {
       'ideal': ideal.isEmpty ? null : ideal,
       'intensity': intensity.isEmpty ? null : intensity,
       'type': type,
+      'owner': userCode  // Use the awaited userCode
     });
   }
 
@@ -377,13 +386,8 @@ class DatabaseHelper {
   
   Future<void> createPartnerTable(String partnerCode, String userCode, bool shareAll) async {
     try {
-      final conn = await Connection.open(Endpoint(
-        host: 'ep-yellow-truth-a5ebo559.us-east-2.aws.neon.tech',
-        database: 'voyagersdb',
-        username: 'voyageruser',
-        password: 'Sk3l3ton!sk3l3ton',
-      ));
-
+      final conn = await openConnection();
+    // Moods
       // Generate both possible table name combinations
       String moodTableNameForward = '${partnerCode}_${userCode}_moods'.toLowerCase();
       String moodTableNameReverse = '${userCode}_${partnerCode}_moods'.toLowerCase();
@@ -423,6 +427,7 @@ class DatabaseHelper {
             SELECT tablename 
             FROM pg_catalog.pg_tables 
             WHERE tablename LIKE '%${userCode.toLowerCase()}%'
+            AND tablename LIKE '%moods%'
             AND tablename != '$finalMoodTableName'
           LOOP
             EXECUTE 'DROP TABLE IF EXISTS ' || quote_ident(_table);
@@ -462,6 +467,60 @@ class DatabaseHelper {
           }
         }
       }
+    // Moments
+      // Generate both possible table name combinations
+      String momentTableNameForward = '${partnerCode}_${userCode}_moments'.toLowerCase();
+      String momentTableNameReverse = '${userCode}_${partnerCode}_moments'.toLowerCase();
+      
+      // Check if either table exists
+      final existingMomentTables = await conn.execute('''
+        SELECT tablename 
+        FROM pg_catalog.pg_tables 
+        WHERE tablename IN ('$momentTableNameForward', '$momentTableNameReverse')
+      ''');
+
+      String finalMomentTableName;
+      if (existingMomentTables.isNotEmpty) {
+        // Use the existing table name if found
+        finalMomentTableName = existingMomentTables[0][0] as String;
+      } else {
+        // If no table exists, use the forward arrangement
+        finalMomentTableName = momentTableNameForward;
+        
+        // Create the new table with proper column definitions
+        await conn.execute('''
+          CREATE TABLE IF NOT EXISTS "$finalMomentTableName" (
+            id SERIAL PRIMARY KEY,
+            title TEXT,
+            date TEXT,
+            status TEXT,
+            description TEXT,
+            feelings TEXT,
+            ideal TEXT,
+            intensity TEXT,
+            type TEXT,
+            owner TEXT
+          )
+        ''');
+      }
+
+      // Clean up any other tables with this user code (except the one we're using)
+      await conn.execute('''
+        DO \$\$
+        DECLARE
+          _table text;
+        BEGIN
+          FOR _table IN 
+            SELECT tablename 
+            FROM pg_catalog.pg_tables 
+            WHERE tablename LIKE '%${userCode.toLowerCase()}%'
+            AND tablename LIKE '%moments%'
+            AND tablename != '$finalMomentTableName'
+          LOOP
+            EXECUTE 'DROP TABLE IF EXISTS ' || quote_ident(_table);
+          END LOOP;
+        END \$\$;
+      ''');
 
       await conn.close();
     } catch (e) {
@@ -471,17 +530,12 @@ class DatabaseHelper {
   }
 
   Future<void> CloudAddMood(int rating, String date, String userCode) async {
-    final conn = await Connection.open(Endpoint(
-      host: 'ep-yellow-truth-a5ebo559.us-east-2.aws.neon.tech',
-      database: 'voyagersdb',
-      username: 'voyageruser',
-      password: 'Sk3l3ton!sk3l3ton',
-    ));
+    final conn = await openConnection();
 
     try {
       // First, find tables matching the user code
       final moodTableResult = await conn.execute(
-        'SELECT tablename FROM pg_catalog.pg_tables WHERE tablename LIKE \'%${userCode.toLowerCase()}%\''
+        'SELECT tablename FROM pg_catalog.pg_tables WHERE tablename LIKE \'%${userCode.toLowerCase()}%\' AND \'moods\''
       );
 
       if (moodTableResult.isNotEmpty) {
@@ -572,6 +626,126 @@ class DatabaseHelper {
       };
     } catch (e) {
       print('Error in getAllMoodData: $e');
+      rethrow;
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> getAllMomentData() async {
+    try {
+      List<Map<String, dynamic>> userMoments = await queryAllMoments();
+      List<Map<String, dynamic>> partnerMoments = [];
+      
+      String? partnerCode = await getPartnerCode();
+      String? userCode = await getUserCode();
+      
+      if (partnerCode != null) {
+        try {
+          final conn = await openConnection();
+
+          // Try both possible table name combinations
+          String momentTableNameForward = '${partnerCode}_${userCode}_moments'.toLowerCase();
+          String momentTableNameReverse = '${userCode}_${partnerCode}_moments'.toLowerCase();
+          
+          final existingTables = await conn.execute('''
+            SELECT tablename 
+            FROM pg_catalog.pg_tables 
+            WHERE tablename IN ('$momentTableNameForward', '$momentTableNameReverse')
+          ''');
+
+          if (existingTables.isNotEmpty) {
+            String momentTableName = existingTables[0][0] as String;
+
+            // Fetch partner's moments with proper table quoting
+            final results = await conn.execute('''
+              SELECT * FROM "$momentTableName" 
+              WHERE owner = '${partnerCode.toUpperCase()}'
+            ''');
+
+            // Convert results to maps
+            for (final row in results) {
+              partnerMoments.add({
+                'id': row[0],
+                'title': row[1],
+                'date': row[2],
+                'status': row[3],
+                'description': row[4],
+                'feelings': row[5],
+                'ideal': row[6],
+                'intensity': row[7],
+                'type': row[8],
+                'owner': row[9],
+              });
+            }
+          }
+          
+          await conn.close();
+        } catch (e) {
+          print('Error fetching partner moment data: $e');
+        }
+      } else {
+        return queryAllMoments();
+      }
+
+      // Return sorted combined list
+      return [...userMoments, ...partnerMoments]..sort((a, b) {
+        int dateA = int.parse(a['date'].toString());
+        int dateB = int.parse(b['date'].toString());
+        return dateB.compareTo(dateA);
+      });
+    } catch (e) {
+      print('Error in getAllMomentData: $e');
+      rethrow;
+    }
+  }
+
+  Future<void> cloudAddMoment(Moment moment, String userCode) async {
+    final conn = await openConnection();
+
+    try {
+      // Find tables matching the user code
+      final momentTableResult = await conn.execute(
+        'SELECT tablename FROM pg_catalog.pg_tables WHERE tablename LIKE \'%${userCode.toLowerCase()}%\' AND tablename LIKE \'%moments%\''
+      );
+
+      if (momentTableResult.isNotEmpty) {
+        final momentTableName = momentTableResult[0][0] as String;
+
+        // Properly escape strings and handle potential null values
+        final results = await conn.execute(
+          'SELECT * FROM "$momentTableName"'
+        );
+
+        int? existing;
+        for (final row in results) {
+          if (row[1] == moment.title && row[9] == moment.owner && row[2] == moment.date) {
+            existing = int.parse(row[0].toString());
+            break;
+          }
+        }
+
+        if (existing == null) {
+          await conn.execute('''
+            INSERT INTO "$momentTableName" 
+            (title, date, status, description, feelings, ideal, intensity, type, owner) 
+            VALUES ('${moment.title}', '${moment.date}', '${moment.status}', '${moment.description}', '${moment.feelings}', '${moment.ideal}', '${moment.intensity}', '${moment.type}', '${moment.owner}')
+          ''');
+        } else {
+          await conn.execute('''
+            UPDATE "$momentTableName" 
+            SET title = '${moment.title}', 
+                status = '${moment.status}', 
+                description = '${moment.description}', 
+                feelings = '${moment.feelings}', 
+                ideal = '${moment.ideal}', 
+                intensity = '${moment.intensity}' 
+            WHERE id = \$7
+          ''');
+        }
+      }
+      await conn.close();
+    } catch (e) {
+      print('Error in cloudAddMoment: $e');
+      await conn.close();
       rethrow;
     }
   }

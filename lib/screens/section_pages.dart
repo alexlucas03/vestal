@@ -7,6 +7,9 @@ class SectionThreePage extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
+        iconTheme: IconThemeData(
+          color: Colors.white,
+        ),
         title: const Text('Section 3 Page'),
       ),
       body: const Center(
@@ -23,6 +26,9 @@ class SectionFourPage extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
+        iconTheme: IconThemeData(
+          color: Colors.white,
+        ),
         title: const Text('Section 4 Page'),
       ),
       body: const Center(

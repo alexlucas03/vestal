@@ -24,7 +24,7 @@ class MoodStatistics extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Divider(color: Color(0xFF3A4C7A), thickness: 1),
+          const Divider(color: Color(0xFF222D49), thickness: 1),
           Table(
             defaultVerticalAlignment: TableCellVerticalAlignment.middle,
             columnWidths: {
@@ -103,11 +103,11 @@ class MoodStatistics extends StatelessWidget {
   TableRow _buildDividerRow() {
     return TableRow(
       children: [
-        const Divider(color: Color(0xFF3A4C7A), thickness: 1),
+        const Divider(color: Color(0xFF222D49), thickness: 1),
         if (showUserData)
-          const Divider(color: Color(0xFF3A4C7A), thickness: 1),
+          const Divider(color: Color(0xFF222D49), thickness: 1),
         if (showPartnerData)
-          const Divider(color: Color(0xFF3A4C7A), thickness: 1),
+          const Divider(color: Color(0xFF222D49), thickness: 1),
       ],
     );
   }

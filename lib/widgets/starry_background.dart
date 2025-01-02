@@ -29,7 +29,7 @@ class StarryPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final Paint paint = Paint();
-    canvas.drawRect(Offset.zero & size, Paint()..color = Color(0xFF3A4C7A));
+    canvas.drawRect(Offset.zero & size, Paint()..color = Color(0xFF222D49));
 
     final Random random = Random(42); // Fixed seed for consistent star pattern
     int numStars = 100;
@@ -38,7 +38,7 @@ class StarryPainter extends CustomPainter {
       double x = random.nextDouble() * size.width;
       double y = random.nextDouble() * size.height;
 
-      Color starColor = Colors.grey[400]!;
+      Color starColor = Colors.grey[700]!;
 
       paint.color = starColor;
       paint.strokeWidth = 1;

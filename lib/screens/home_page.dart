@@ -74,10 +74,9 @@ class _MyHomePageState extends State<MyHomePage> with SingleTickerProviderStateM
                   decoration: BoxDecoration(
                     color: Colors.transparent,
                     shape: BoxShape.circle,
-                    border: Border.all(
-                      color: Colors.black,
-                      width: 10,
-                    ),
+                  ),
+                  child: Image.asset(
+                    'assets/images/voyagersicon.png',
                   ),
                 ),
                 
@@ -126,35 +125,51 @@ class _MyHomePageState extends State<MyHomePage> with SingleTickerProviderStateM
   }
 
   Widget _buildSection(String title, Widget page, double buttonSize) {
-    return ElevatedButton(
-      onPressed: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (context) => page),
-        );
-      },
-      style: ElevatedButton.styleFrom(
-        backgroundColor: Colors.white,
-        foregroundColor: Colors.white,
-        padding: EdgeInsets.zero,
-        fixedSize: Size(buttonSize, buttonSize),
-        shape: CircleBorder(
-          side: BorderSide(
-            color: const Color(0xFF0A205A),
-            width: 2,
-          ),
-        ),
+    IconData iconData;
+    switch (title) {
+      case 'Moods':
+        iconData = Icons.mood;
+        break;
+      case 'Moments':
+        iconData = Icons.book;
+        break;
+      case 'Section 3':
+        iconData = Icons.circle;
+        break;
+      case 'Section 4':
+        iconData = Icons.circle;
+        break;
+      case 'Settings':
+        iconData = Icons.settings;
+        break;
+      default:
+        iconData = Icons.circle;
+    }
+
+    return Container(
+      width: buttonSize,
+      height: buttonSize,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: Color(0xFF222D49),
       ),
-      child: Center(
-        child: Text(
-          title,
-          textAlign: TextAlign.center,
-          style: const TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.bold,
-            color: Colors.black,
-          ),
+      child: IconButton(
+        icon: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              iconData,
+              color: Colors.white,
+              size: 48,
+            ),
+          ],
         ),
+        onPressed: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => page),
+          );
+        },
       ),
     );
   }

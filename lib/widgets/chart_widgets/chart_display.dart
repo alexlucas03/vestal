@@ -88,24 +88,20 @@ class ChartDisplay extends StatelessWidget {
                 }
               }
 
-              bool showLabel = index % 5 == 0 || (index == chartData.allDates.length - 1);
-
-              if (showLabel) {
-                return SideTitleWidget(
-                  axisSide: meta.axisSide,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(dayText, style: const TextStyle(fontSize: 12)),
-                      if (showMonth)
-                        Text(
-                          monthKey.toUpperCase(),
-                          style: const TextStyle(fontSize: 14, color: Colors.grey),
-                        ),
-                    ],
-                  ),
-                );
-              }
+              return SideTitleWidget(
+                axisSide: meta.axisSide,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(dayText, style: const TextStyle(fontSize: 12)),
+                    if (showMonth)
+                      Text(
+                        monthKey.toUpperCase(),
+                        style: const TextStyle(fontSize: 14, color: Colors.grey),
+                      ),
+                  ],
+                ),
+              );
             }
             return const SizedBox.shrink();
           },

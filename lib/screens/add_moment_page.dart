@@ -98,23 +98,16 @@ class _AddMomentPageState extends State<AddMomentPage> {
       }
     }
   }
-  // TODO
-  Future<void> _sendMoment() async {
-    if (widget.moment != null) {
-      try {
-        await DatabaseHelper.instance.removeMoment(widget.moment!.id!);
-
-        if (mounted) {
-          Navigator.pop(context, true);
-        }
-      } catch (e) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(e.toString()),
-            backgroundColor: Colors.red,
-          ),
-        );
+  Future<void> _sendMoment(Moment moment) async {
+    try {
+      String? userCode = await DatabaseHelper.instance.getUserCode();
+      if (userCode == null) {
+        throw Exception('User code not found');
       }
+      await DatabaseHelper.instance.cloudAddMoment(moment, userCode);
+    } catch (e) {
+      print('Error sending moment: $e');
+      rethrow;
     }
   }
 
@@ -133,21 +126,63 @@ class _AddMomentPageState extends State<AddMomentPage> {
 
     return Scaffold(
       appBar: AppBar(
+        iconTheme: IconThemeData(
+          color: Colors.white,
+        ),
         centerTitle: true,
         title: Text(widget.moment != null ? 'Edit Moment' : 'Add Moment'),
         actions: [
           if (widget.moment != null)
             IconButton(
-              icon: const Icon(Icons.send_rounded),
+              icon: const Icon(Icons.delete),
               onPressed: _removeMoment,
               color: Colors.white,
             ),
           if (widget.moment != null)
             IconButton(
-              icon: const Icon(Icons.delete),
-              onPressed: _sendMoment,
+              icon: const Icon(Icons.send_rounded),
+              onPressed: () async {
+                try {
+                  String? userCode = await DatabaseHelper.instance.getUserCode();
+                  if (userCode == null) {
+                    throw Exception('User code not found');
+                  }
+
+                  final moment = Moment(
+                    title: _titleController.text,
+                    date: widget.moment?.date ?? DateFormat('yyyyMMdd').format(DateTime.now()),
+                    status: _status.toLowerCase(),
+                    description: _descriptionController.text,
+                    feelings: _feelingsController.text,
+                    ideal: _idealController.text,
+                    intensity: _intensity?.toString() ?? '',
+                    type: _type,
+                    owner: userCode,  // Use the actual userCode
+                  );
+                  
+                  await _sendMoment(moment);
+                  
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Moment shared successfully'),
+                        backgroundColor: Colors.green,
+                      ),
+                    );
+                  }
+                } catch (e) {
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Error sharing moment: ${e.toString()}'),
+                        backgroundColor: Colors.red,
+                      ),
+                    );
+                  }
+                }
+              },
               color: Colors.white,
-            )
+            ),
         ],
       ),
       body: Stack(

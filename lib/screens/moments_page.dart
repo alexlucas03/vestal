@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:voyagers/screens/add_moment_page.dart';
 import '../database_helper.dart';
 import '../widgets/models/moment.dart';
@@ -37,7 +38,8 @@ class _MomentsPageState extends State<MomentsPage> with SingleTickerProviderStat
 
   Future<void> _loadMoments() async {
     try {
-      final moments = await DatabaseHelper.instance.queryAllMoments();
+      List<Map<String, dynamic>> moments = await DatabaseHelper.instance.getAllMomentData();
+
       if (mounted) {
         setState(() {
           // Separate active and archived moments
@@ -59,12 +61,14 @@ class _MomentsPageState extends State<MomentsPage> with SingleTickerProviderStat
         });
       }
       print('Error loading moments: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error loading moments: ${e.toString()}'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      if (mounted && context != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error loading moments: ${e.toString()}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 
@@ -146,6 +150,9 @@ class _MomentsPageState extends State<MomentsPage> with SingleTickerProviderStat
     if (_isLoading) {
       return Scaffold(
         appBar: AppBar(
+          iconTheme: IconThemeData(
+            color: Colors.white,
+          ),
           title: const Text('Moments Journal'),
         ),
         body: const Center(
@@ -156,6 +163,9 @@ class _MomentsPageState extends State<MomentsPage> with SingleTickerProviderStat
 
     return Scaffold(
       appBar: AppBar(
+        iconTheme: IconThemeData(
+          color: Colors.white,
+        ),
         title: const Text('Moments Journal'),
       ),
       body: Padding(
@@ -230,6 +240,9 @@ class _MomentsPageState extends State<MomentsPage> with SingleTickerProviderStat
             ),
             ElevatedButton(
               onPressed: () => _navigateToAddMoment(),
+              style: ElevatedButton.styleFrom(
+                foregroundColor: Color(0xFF222D49),
+              ),
               child: const Text('Add Moment'),
             ),
             const SizedBox(height: 32),

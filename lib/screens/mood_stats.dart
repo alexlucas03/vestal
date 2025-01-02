@@ -53,6 +53,9 @@ class _MoodStatsState extends State<MoodStats> {
     if (_isLoading) {
       return Scaffold(
         appBar: AppBar(
+          iconTheme: IconThemeData(
+            color: Colors.white,
+          ),
           title: const Text('Mood Stats'),
         ),
         body: const Center(
@@ -63,6 +66,9 @@ class _MoodStatsState extends State<MoodStats> {
 
     return Scaffold(
       appBar: AppBar(
+        iconTheme: IconThemeData(
+          color: Colors.white,
+        ),
         title: const Text('Mood Stats'),
       ),
       body: Padding(
@@ -87,6 +93,9 @@ class _MoodStatsState extends State<MoodStats> {
                             ),
                           );
                         },
+                        style: ElevatedButton.styleFrom(
+                          foregroundColor: Color(0xFF222D49),
+                        ),
                         child: const Text('Rate Your Mood'),
                       ),
                     ],

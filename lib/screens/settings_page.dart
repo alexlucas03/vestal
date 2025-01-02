@@ -152,6 +152,9 @@ class _SettingsPageState extends State<SettingsPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
+        iconTheme: IconThemeData(
+          color: Colors.white,
+        ),
         title: const Text('Settings'),
       ),
       body: _isLoading 
@@ -179,7 +182,7 @@ class _SettingsPageState extends State<SettingsPage> {
                 ElevatedButton.icon(
                   style: ElevatedButton.styleFrom(
                     minimumSize: const Size(double.infinity, 50),
-                    backgroundColor: _isPinkColor ? Colors.pink : const Color(0xFF3A4C7A),
+                    backgroundColor: _isPinkColor ? Colors.pink : const Color(0xFF222D49),
                     foregroundColor: Colors.white,
                   ),
                   onPressed: _toggleColor,
@@ -195,7 +198,7 @@ class _SettingsPageState extends State<SettingsPage> {
                 ElevatedButton(
                   style: ElevatedButton.styleFrom(
                     minimumSize: const Size(double.infinity, 50),
-                    backgroundColor: Color(0xFF3A4C7A),
+                    backgroundColor: Color(0xFF222D49),
                     foregroundColor: Colors.white,
                   ),
                   onPressed: () => _showPartnerCodeDialog(context),
@@ -204,7 +207,7 @@ class _SettingsPageState extends State<SettingsPage> {
                     style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.bold,
-                      backgroundColor: Color(0xFF3A4C7A),
+                      backgroundColor: Color(0xFF222D49),
                     ),
                   ),
                 ),

@@ -8,6 +8,7 @@ class Moment {
   final String ideal;
   final String intensity;
   final String type;
+  final String owner;
 
   Moment({
     this.id,
@@ -19,6 +20,7 @@ class Moment {
     required this.ideal,
     required this.intensity,
     required this.type,
+    required this.owner,
   });
 
   factory Moment.fromMap(Map<String, dynamic> map) {
@@ -32,6 +34,7 @@ class Moment {
       ideal: map['ideal'] ?? '',
       intensity: map['intensity']?.toString() ?? '',
       type: map['type']?.toString() ?? '',
+      owner: map['owner']?.toString() ?? '',
     );
   }
 }
