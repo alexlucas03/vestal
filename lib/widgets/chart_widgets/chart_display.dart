@@ -48,15 +48,7 @@ class ChartDisplay extends StatelessWidget {
       drawHorizontalLine: true,
       drawVerticalLine: true,
       horizontalInterval: 2,
-      verticalInterval: 5,
       getDrawingHorizontalLine: (value) {
-        return FlLine(
-          color: Colors.grey,
-          strokeWidth: 1,
-          dashArray: [5, 5],
-        );
-      },
-      getDrawingVerticalLine: (value) {
         return FlLine(
           color: Colors.grey,
           strokeWidth: 1,
