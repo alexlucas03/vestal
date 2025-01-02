@@ -46,7 +46,7 @@ class ChartDisplay extends StatelessWidget {
     return FlGridData(
       show: true,
       drawHorizontalLine: true,
-      drawVerticalLine: true,
+      drawVerticalLine: false,
       horizontalInterval: 2,
       getDrawingHorizontalLine: (value) {
         return FlLine(
