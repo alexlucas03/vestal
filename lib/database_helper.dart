@@ -631,72 +631,90 @@ class DatabaseHelper {
   }
 
   Future<List<Map<String, dynamic>>> getAllMomentData() async {
-    try {
-      List<Map<String, dynamic>> userMoments = await queryAllMoments();
-      List<Map<String, dynamic>> partnerMoments = [];
-      
-      String? partnerCode = await getPartnerCode();
-      String? userCode = await getUserCode();
-      
-      if (partnerCode != null) {
-        try {
-          final conn = await openConnection();
+  try {
+    List<Map<String, dynamic>> userMoments = await queryAllMoments();
+    List<Map<String, dynamic>> partnerMoments = [];
+    
+    String? partnerCode = await getPartnerCode();
+    String? userCode = await getUserCode();
+    
+    print('DEBUG: User Code = $userCode');
+    print('DEBUG: Partner Code = $partnerCode');
+    
+    if (partnerCode != null && userCode != null) {
+      try {
+        final conn = await openConnection();
 
-          // Try both possible table name combinations
-          String momentTableNameForward = '${partnerCode}_${userCode}_moments'.toLowerCase();
-          String momentTableNameReverse = '${userCode}_${partnerCode}_moments'.toLowerCase();
-          
-          final existingTables = await conn.execute('''
-            SELECT tablename 
-            FROM pg_catalog.pg_tables 
-            WHERE tablename IN ('$momentTableNameForward', '$momentTableNameReverse')
+        // Generate both possible table name combinations
+        String momentTableNameForward = '${partnerCode}_${userCode}_moments'.toLowerCase();
+        String momentTableNameReverse = '${userCode}_${partnerCode}_moments'.toLowerCase();
+        
+        final existingTables = await conn.execute('''
+          SELECT tablename 
+          FROM pg_catalog.pg_tables 
+          WHERE tablename IN ('$momentTableNameForward', '$momentTableNameReverse')
+        ''');
+
+        if (existingTables.isNotEmpty) {
+          String momentTableName = existingTables[0][0] as String;
+          print('DEBUG: Using table: $momentTableName');
+
+          final results = await conn.execute('''
+            SELECT * FROM "$momentTableName" 
+            WHERE owner = '${partnerCode.toUpperCase()}'
           ''');
 
-          if (existingTables.isNotEmpty) {
-            String momentTableName = existingTables[0][0] as String;
+          print('DEBUG: Found ${results.length} partner moments');
 
-            // Fetch partner's moments with proper table quoting
-            final results = await conn.execute('''
-              SELECT * FROM "$momentTableName" 
-              WHERE owner = '${partnerCode.toUpperCase()}'
-            ''');
-
-            // Convert results to maps
-            for (final row in results) {
-              partnerMoments.add({
-                'id': row[0],
-                'title': row[1],
-                'date': row[2],
-                'status': row[3],
-                'description': row[4],
-                'feelings': row[5],
-                'ideal': row[6],
-                'intensity': row[7],
-                'type': row[8],
-                'owner': row[9],
-              });
+          for (final row in results) {
+            // Ensure all values are properly converted to strings
+            Map<String, dynamic> moment = {
+              'title': row[0]?.toString() ?? '',
+              'date': row[1]?.toString() ?? '',
+              'status': row[2]?.toString() ?? '',
+              'description': row[3]?.toString() ?? '',
+              'feelings': row[4]?.toString() ?? '',
+              'ideal': row[5]?.toString() ?? '',
+              'intensity': row[6]?.toString() ?? '',
+              'type': row[7]?.toString() ?? '',
+              'owner': row[8]?.toString() ?? ''
+            };
+            
+            // Only add moment if it has a valid date
+            if (moment['date']?.isNotEmpty == true && 
+                int.tryParse(moment['date'].toString()) != null) {
+              partnerMoments.add(moment);
             }
           }
-          
-          await conn.close();
-        } catch (e) {
-          print('Error fetching partner moment data: $e');
         }
-      } else {
-        return queryAllMoments();
+        
+        await conn.close();
+      } catch (e) {
+        print('Error fetching partner moment data: $e');
       }
-
-      // Return sorted combined list
-      return [...userMoments, ...partnerMoments]..sort((a, b) {
-        int dateA = int.parse(a['date'].toString());
-        int dateB = int.parse(b['date'].toString());
-        return dateB.compareTo(dateA);
-      });
-    } catch (e) {
-      print('Error in getAllMomentData: $e');
-      rethrow;
     }
+
+    // Combine and sort lists, safely handling invalid dates
+    var combinedMoments = [...userMoments, ...partnerMoments];
+    combinedMoments.sort((a, b) {
+      // Safely parse dates with null handling
+      int? dateA = int.tryParse(a['date']?.toString() ?? '');
+      int? dateB = int.tryParse(b['date']?.toString() ?? '');
+      
+      if (dateA == null && dateB == null) return 0;
+      if (dateA == null) return 1;
+      if (dateB == null) return -1;
+      
+      return dateB.compareTo(dateA);
+    });
+
+    return combinedMoments;
+
+  } catch (e) {
+    print('Error in getAllMomentData: $e');
+    rethrow;
   }
+}
 
   Future<void> cloudAddMoment(Moment moment, String userCode) async {
     final conn = await openConnection();
