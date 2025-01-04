@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:voyagers/screens/add_moment_page.dart';
 import '../database_helper.dart';
 import '../widgets/models/moment.dart';
@@ -19,6 +18,7 @@ class _MomentsPageState extends State<MomentsPage> with SingleTickerProviderStat
   List<Map<String, dynamic>> _archivedMoments = [];
   bool _isLoading = true;
   bool _showArchive = false;
+  String? _userCode;
 
   @override
   void initState() {
@@ -38,6 +38,7 @@ class _MomentsPageState extends State<MomentsPage> with SingleTickerProviderStat
 
   Future<void> _loadMoments() async {
     try {
+      _userCode = await DatabaseHelper.instance.getUserCode();
       List<Map<String, dynamic>> moments = await DatabaseHelper.instance.getAllMomentData();
 
       if (mounted) {
@@ -120,9 +121,12 @@ class _MomentsPageState extends State<MomentsPage> with SingleTickerProviderStat
               Expanded(
                 child: Text(
                   moment['title'].toString(),
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
+                    color: moment['owner']?.toString() == _userCode
+                        ? const Color(0xFF222D49)
+                        : Colors.pink,
                   ),
                 ),
               ),
