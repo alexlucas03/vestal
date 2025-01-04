@@ -8,7 +8,8 @@ class Moment {
   final String ideal;
   final String intensity;
   final String type;
-  final String owner;
+  final String? owner;
+  final bool shared;
 
   Moment({
     this.id,
@@ -20,7 +21,8 @@ class Moment {
     required this.ideal,
     required this.intensity,
     required this.type,
-    required this.owner,
+    this.owner,
+    required this.shared,
   });
 
   factory Moment.fromMap(Map<String, dynamic> map) {
@@ -33,8 +35,25 @@ class Moment {
       feelings: map['feelings'] ?? '',
       ideal: map['ideal'] ?? '',
       intensity: map['intensity']?.toString() ?? '',
-      type: map['type']?.toString() ?? '',
-      owner: map['owner']?.toString() ?? '',
+      type: map['type'] ?? '',
+      owner: map['owner'],
+      shared: map['shared'] == 1 || map['shared'] == '1',
     );
+  }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'title': title,
+      'date': date,
+      'status': status,
+      'description': description,
+      'feelings': feelings,
+      'ideal': ideal,
+      'intensity': intensity,
+      'type': type,
+      'owner': owner,
+      'shared': shared ? 1 : 0,
+    };
   }
 }

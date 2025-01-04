@@ -34,7 +34,7 @@ class DatabaseHelper {
     // Open database with onUpgrade callback
     return await openDatabase(
       path,
-      version: 12, // Increased version number for new table
+      version: 15, // Increased version number for new table
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
@@ -129,6 +129,99 @@ class DatabaseHelper {
         ADD COLUMN owner TEXT
       ''');
     }
+
+    if (oldVersion < 14) {
+    // Create a temporary table with the new schema
+    await db.execute('''
+      CREATE TABLE moments_temp (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        title TEXT NOT NULL,
+        date TEXT NOT NULL,
+        status TEXT NOT NULL,
+        description TEXT DEFAULT NULL,
+        feelings TEXT DEFAULT NULL,
+        ideal TEXT DEFAULT NULL,
+        intensity TEXT DEFAULT NULL,
+        type TEXT NOT NULL DEFAULT 'good',
+        owner TEXT,
+        shared INTEGER DEFAULT 0
+      )
+    ''');
+
+    // Copy data from old table to new table
+    await db.execute('''
+      INSERT INTO moments_temp 
+      SELECT id, title, date, status, description, feelings, ideal, intensity, type, owner, 0
+      FROM moments
+    ''');
+
+    // Drop old table
+    await db.execute('DROP TABLE moments');
+
+    // Rename temp table to moments
+    await db.execute('ALTER TABLE moments_temp RENAME TO moments');
+  }
+
+  if (oldVersion < 15) {
+    // First check if the table has the correct schema
+    var tableInfo = await db.rawQuery('PRAGMA table_info(moments)');
+    bool hasSharedColumn = false;
+    String sharedColumnType = '';
+    
+    for (var column in tableInfo) {
+      if (column['name'] == 'shared') {
+        hasSharedColumn = true;
+        sharedColumnType = column['type'].toString();
+        break;
+      }
+    }
+
+    // If shared column doesn't exist or is not INTEGER type
+    if (!hasSharedColumn || sharedColumnType != 'INTEGER') {
+      // Create temporary table with correct schema
+      await db.execute('''
+        CREATE TABLE moments_temp (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          title TEXT NOT NULL,
+          date TEXT NOT NULL,
+          status TEXT NOT NULL,
+          description TEXT DEFAULT NULL,
+          feelings TEXT DEFAULT NULL,
+          ideal TEXT DEFAULT NULL,
+          intensity TEXT DEFAULT NULL,
+          type TEXT NOT NULL DEFAULT 'good',
+          owner TEXT,
+          shared INTEGER DEFAULT 0
+        )
+      ''');
+
+      // Copy data, converting any existing shared values to INTEGER
+      await db.execute('''
+        INSERT INTO moments_temp 
+        SELECT 
+          id, 
+          title, 
+          date, 
+          status, 
+          description, 
+          feelings, 
+          ideal, 
+          intensity, 
+          type, 
+          owner,
+          CASE 
+            WHEN shared IS NULL THEN 0
+            WHEN shared = 1 OR shared = 'true' OR shared = 't' THEN 1
+            ELSE 0
+          END as shared
+        FROM moments
+      ''');
+
+      // Drop old table and rename new one
+      await db.execute('DROP TABLE moments');
+      await db.execute('ALTER TABLE moments_temp RENAME TO moments');
+    }
+  }
   }
 
   // Separate method for creating the moods table
@@ -312,20 +405,20 @@ class DatabaseHelper {
   }
 
   Future<List<Map<String, dynamic>>> queryAllMoments() async {
-  Database db = await instance.db;
-  try {
-    return await db.query('moments', orderBy: 'date DESC');
-  } catch (e) {
-    print('Error in queryAllMoments: $e');
-    throw e;
+    Database db = await instance.db;
+    try {
+      return await db.query('moments', orderBy: 'date DESC');
+    } catch (e) {
+      print('Error in queryAllMoments: $e');
+      throw e;
+    }
   }
-}
 
   Future<int> addMoment(String title, String date, String status, String description, 
-      String feelings, String ideal, String intensity, String type) async {
+      String feelings, String ideal, String intensity, String type, bool shared) async {
     Database db = await instance.db;
-    String? userCode = await getUserCode();  // Add await here
-    
+    String? userCode = await getUserCode();
+      
     return await db.insert('moments', {
       'title': title,
       'date': date,
@@ -335,7 +428,8 @@ class DatabaseHelper {
       'ideal': ideal.isEmpty ? null : ideal,
       'intensity': intensity.isEmpty ? null : intensity,
       'type': type,
-      'owner': userCode  // Use the awaited userCode
+      'owner': userCode,
+      'shared': shared ? 1 : 0  // Convert boolean to integer
     });
   }
 
@@ -362,6 +456,32 @@ class DatabaseHelper {
       },
       where: 'id = ?',
       whereArgs: [id],
+    );
+  }
+
+  Future<int> setShared(String title, String type) async {
+    Database db = await instance.db;
+      
+    return await db.update(
+      'moments',
+      {
+        'shared': 1,  // Use 1 instead of true
+      },
+      where: 'title = ? AND type = ?',
+      whereArgs: [title, type],
+    );
+  }
+
+  Future<int> setUnshared(String title, String type) async {
+    Database db = await instance.db;
+      
+    return await db.update(
+      'moments',
+      {
+        'shared': 0,
+      },
+      where: 'title = ? AND type = ?',
+      whereArgs: [title, type],
     );
   }
 
@@ -499,7 +619,8 @@ class DatabaseHelper {
             ideal TEXT,
             intensity TEXT,
             type TEXT,
-            owner TEXT
+            owner TEXT,
+            shared BOOLEAN DEFAULT false
           )
         ''');
       }
@@ -669,15 +790,16 @@ class DatabaseHelper {
           for (final row in results) {
             // Ensure all values are properly converted to strings
             Map<String, dynamic> moment = {
-              'title': row[0]?.toString() ?? '',
-              'date': row[1]?.toString() ?? '',
-              'status': row[2]?.toString() ?? '',
-              'description': row[3]?.toString() ?? '',
-              'feelings': row[4]?.toString() ?? '',
-              'ideal': row[5]?.toString() ?? '',
-              'intensity': row[6]?.toString() ?? '',
-              'type': row[7]?.toString() ?? '',
-              'owner': row[8]?.toString() ?? ''
+              'title': row[1]?.toString() ?? '',
+              'date': row[2]?.toString() ?? '',
+              'status': row[3]?.toString() ?? '',
+              'description': row[4]?.toString() ?? '',
+              'feelings': row[5]?.toString() ?? '',
+              'ideal': row[6]?.toString() ?? '',
+              'intensity': row[7]?.toString() ?? '',
+              'type': row[8]?.toString() ?? '',
+              'owner': row[9]?.toString() ?? '',
+              'shared': true
             };
             
             // Only add moment if it has a valid date
@@ -744,19 +866,23 @@ class DatabaseHelper {
         if (existing == null) {
           await conn.execute('''
             INSERT INTO "$momentTableName" 
-            (title, date, status, description, feelings, ideal, intensity, type, owner) 
-            VALUES ('${moment.title}', '${moment.date}', '${moment.status}', '${moment.description}', '${moment.feelings}', '${moment.ideal}', '${moment.intensity}', '${moment.type}', '${moment.owner}')
+            (title, date, status, description, feelings, ideal, intensity, type, owner, shared) 
+            VALUES ('${moment.title}', '${moment.date}', '${moment.status}', 
+                    '${moment.description}', '${moment.feelings}', '${moment.ideal}', 
+                    '${moment.intensity}', '${moment.type}', '${moment.owner}', 
+                    ${moment.shared})
           ''');
         } else {
           await conn.execute('''
             UPDATE "$momentTableName" 
-            SET title = '${moment.title}', 
-                status = '${moment.status}', 
+            SET status = '${moment.status}', 
                 description = '${moment.description}', 
                 feelings = '${moment.feelings}', 
                 ideal = '${moment.ideal}', 
-                intensity = '${moment.intensity}' 
-            WHERE id = \$7
+                intensity = '${moment.intensity}',
+                shared = ${moment.shared}
+            WHERE title = '${moment.title}'
+            AND owner = '${moment.owner}'
           ''');
         }
       }
@@ -767,4 +893,34 @@ class DatabaseHelper {
       rethrow;
     }
   }
+
+  Future<void> cloudRemoveMoment(Moment moment, String userCode) async {
+    final conn = await openConnection();
+
+    try {
+      // Find tables matching the user code
+      final momentTableResult = await conn.execute(
+        'SELECT tablename FROM pg_catalog.pg_tables WHERE tablename LIKE \'%${userCode.toLowerCase()}%\' AND tablename LIKE \'%moments%\''
+      );
+
+      if (momentTableResult.isNotEmpty) {
+        final momentTableName = momentTableResult[0][0] as String;
+
+        await conn.execute('''
+          DELETE FROM "$momentTableName" 
+          WHERE title = '${moment.title}'
+          AND status = '${moment.status}'
+          AND description = '${moment.description}'
+          AND feelings = '${moment.feelings}'
+          AND ideal = '${moment.ideal}'
+          AND intensity = '${moment.intensity}'
+        ''');
+      }
+      await conn.close();
+    } catch (e) {
+      print('Error in cloudRemoveMoment: $e');
+      await conn.close();
+      rethrow;
+    }
+}
 }
