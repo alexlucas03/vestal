@@ -162,6 +162,8 @@ class _AddMomentPageState extends State<AddMomentPage> {
             _feelingsController.text,
             _idealController.text,
             _intensity?.toString() ?? '',
+            widget.moment!.owner!,
+            _isShared
           );
         } else {
           // Add new moment
@@ -195,7 +197,10 @@ class _AddMomentPageState extends State<AddMomentPage> {
   Future<void> _removeMoment() async {
     if (widget.moment != null) {
       try {
-        await DatabaseHelper.instance.removeMoment(widget.moment!.id!);
+        if (widget.moment!.owner! == _userCode) {
+          await DatabaseHelper.instance.removeMoment(widget.moment!.id!);
+        }
+        await DatabaseHelper.instance.cloudRemoveMoment(widget.moment!, _userCode!);
 
         if (mounted) {
           Navigator.pop(context, true);

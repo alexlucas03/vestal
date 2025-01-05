@@ -11,12 +11,17 @@ void main() async {
   databaseFactory = databaseFactoryFfi;
   await DatabaseHelper.instance.initDb();
 
+  // Handle user code setup
   String? userCode = await DatabaseHelper.instance.getUserCode();
   if (userCode == null) {
     String newCode = generateRandomCode(6);
     await DatabaseHelper.instance.storeUserCode(newCode);
   }
 
+  // Sync moments from cloud database
+  await DatabaseHelper.instance.syncMomentsFromCloud();
+
+  // Check if mood is submitted today
   String formattedDate = DateFormat('yyyyMMdd').format(DateTime.now());
   bool isMoodSubmittedToday = await DatabaseHelper.instance.hasMoodForToday(formattedDate);
 

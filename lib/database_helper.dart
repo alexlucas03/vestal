@@ -433,30 +433,64 @@ class DatabaseHelper {
     });
   }
 
-  Future<int> updateMoment(
+  Future<void> updateMoment(
     int id,
     String title, 
     String status,
     String description,
     String feelings,
     String ideal,
-    String intensity
+    String intensity,
+    String owner,
+    bool isShared
   ) async {
-    Database db = await instance.db;
-    
-    return await db.update(
-      'moments',
-      {
-        'title': title,
-        'status': status,
-        'description': description.isEmpty ? null : description,
-        'feelings': feelings.isEmpty ? null : feelings,
-        'ideal': ideal.isEmpty ? null : ideal,
-        'intensity': intensity.isEmpty ? null : intensity,
-      },
-      where: 'id = ?',
-      whereArgs: [id],
-    );
+    if (owner == await getUserCode()) {
+      Database db = await instance.db;
+      await db.update(
+        'moments',
+        {
+          'title': title,
+          'status': status,
+          'description': description.isEmpty ? null : description,
+          'feelings': feelings.isEmpty ? null : feelings,
+          'ideal': ideal.isEmpty ? null : ideal,
+          'intensity': intensity.isEmpty ? null : intensity,
+        },
+        where: 'id = ?',
+        whereArgs: [id],
+      );
+    }
+
+    if (isShared) {
+      final conn = await openConnection();
+
+      final existingTables = await conn.execute('''
+          SELECT tablename 
+          FROM pg_catalog.pg_tables 
+          WHERE tablename LIKE '${await getPartnerCode()}' AND '${await getUserCode()}' and 'moments'
+        ''');
+
+        if (existingTables.isNotEmpty) {
+          String momentTableName = existingTables[0][0] as String;
+
+          await conn.execute('''
+            UPDATE $momentTableName 
+            SET 
+              title = $title,
+              status = $status,
+              description = $description 
+              feelings = $feelings 
+              ideal = $ideal 
+              intensity = $intensity 
+            WHERE 
+              title = '$title'
+              AND OWNER = $owner
+          ''');
+
+        }
+        
+        await conn.close();
+    }
   }
 
   Future<int> setShared(String title, String type) async {
@@ -702,16 +736,15 @@ class DatabaseHelper {
       if (partnerCode != null && userCode != null) {
         try {
           final conn = await openConnection();
-
-          // Try both possible table name combinations
-          String moodTableNameForward = '${partnerCode}_${userCode}_moods'.toLowerCase();
-          String moodTableNameReverse = '${userCode}_${partnerCode}_moods'.toLowerCase();
           
           // Check which table exists
           final existingTables = await conn.execute('''
             SELECT tablename 
             FROM pg_catalog.pg_tables 
-            WHERE tablename IN ('$moodTableNameForward', '$moodTableNameReverse')
+            WHERE tablename 
+            LIKE $partnerCode
+            AND $userCode
+            AND 'moods'
           ''');
 
           if (existingTables.isNotEmpty) {
@@ -922,5 +955,134 @@ class DatabaseHelper {
       await conn.close();
       rethrow;
     }
-}
+  }
+
+  Future<void> syncMomentsFromCloud() async {
+    try {
+      String? userCode = await getUserCode();
+      String? partnerCode = await getPartnerCode();
+      
+      if (userCode == null || partnerCode == null) {
+        return; // No syncing needed if codes aren't set
+      }
+
+      final conn = await openConnection();
+      Database localDb = await db;
+
+      // Generate both possible table name combinations
+      String momentTableNameForward = '${partnerCode}_${userCode}_moments'.toLowerCase();
+      String momentTableNameReverse = '${userCode}_${partnerCode}_moments'.toLowerCase();
+      
+      final existingTables = await conn.execute('''
+        SELECT tablename 
+        FROM pg_catalog.pg_tables 
+        WHERE tablename IN ('$momentTableNameForward', '$momentTableNameReverse')
+      ''');
+
+      // Get all local moments first
+      List<Map<String, dynamic>> localMoments = await localDb.query('moments');
+
+      if (existingTables.isEmpty) {
+        // No cloud table exists, mark all shared moments as unshared
+        await localDb.transaction((txn) async {
+          for (var moment in localMoments) {
+            if (moment['shared'] == 1) {
+              await txn.update(
+                'moments',
+                {'shared': 0},
+                where: 'id = ?',
+                whereArgs: [moment['id']],
+              );
+            }
+          }
+        });
+        await conn.close();
+        return;
+      }
+
+      String momentTableName = existingTables[0][0] as String;
+
+      // Get all moments from cloud where owner matches userCode
+      final cloudResults = await conn.execute('''
+        SELECT * FROM "$momentTableName" 
+        WHERE owner = '${userCode.toUpperCase()}'
+      ''');
+
+      // Convert cloud results to a more easily searchable format
+      Map<String, Map<String, dynamic>> cloudMoments = {};
+      for (final row in cloudResults) {
+        String key = '${row[1]}_${row[2]}_${row[9]}'; // title_date_owner
+        cloudMoments[key] = {
+          'title': row[1]?.toString() ?? '',
+          'date': row[2]?.toString() ?? '',
+          'status': row[3]?.toString() ?? '',
+          'description': row[4]?.toString() ?? '',
+          'feelings': row[5]?.toString() ?? '',
+          'ideal': row[6]?.toString() ?? '',
+          'intensity': row[7]?.toString() ?? '',
+          'type': row[8]?.toString() ?? '',
+          'owner': row[9]?.toString() ?? '',
+          'shared': row[10] == true ? 1 : 0
+        };
+      }
+
+      // Begin transaction for all updates
+      await localDb.transaction((txn) async {
+        for (var localMoment in localMoments) {
+          String key = '${localMoment['title']}_${localMoment['date']}_${localMoment['owner']}';
+          
+          if (cloudMoments.containsKey(key)) {
+            // Moment exists in cloud, update local with cloud data
+            var cloudMoment = cloudMoments[key]!;
+            if (_momentNeedsUpdate(localMoment, cloudMoment)) {
+              await txn.update(
+                'moments',
+                cloudMoment,
+                where: 'id = ?',
+                whereArgs: [localMoment['id']],
+              );
+            }
+          } else {
+            // Moment doesn't exist in cloud, mark as unshared if it was shared
+            if (localMoment['shared'] == 1) {
+              await txn.update(
+                'moments',
+                {'shared': 0},
+                where: 'id = ?',
+                whereArgs: [localMoment['id']],
+              );
+            }
+          }
+        }
+
+        // Add any new moments from cloud that don't exist locally
+        for (var cloudMoment in cloudMoments.values) {
+          final localResults = await txn.query(
+            'moments',
+            where: 'title = ? AND date = ? AND owner = ?',
+            whereArgs: [cloudMoment['title'], cloudMoment['date'], cloudMoment['owner']],
+          );
+
+          if (localResults.isEmpty) {
+            await txn.insert('moments', cloudMoment);
+          }
+        }
+      });
+
+      await conn.close();
+    } catch (e) {
+      print('Error in syncMomentsFromCloud: $e');
+      // Don't rethrow - we want the app to continue even if sync fails
+    }
+  }
+
+  // Helper function to determine if a moment needs updating
+  bool _momentNeedsUpdate(Map<String, dynamic> local, Map<String, dynamic> cloud) {
+    final fieldsToCompare = [
+      'title', 'date', 'status', 'description', 'feelings', 
+      'ideal', 'intensity', 'type', 'shared'
+    ];
+    
+    return fieldsToCompare.any((field) => local[field] != cloud[field]);
+  }
 }
