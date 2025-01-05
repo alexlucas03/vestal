@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:voyagers/screens/add_moment_page.dart';
+import 'package:vestal/screens/add_moment_page.dart';
 import '../database_helper.dart';
 import '../widgets/models/moment.dart';
 

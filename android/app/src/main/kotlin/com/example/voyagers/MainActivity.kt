@@ -1,4 +1,4 @@
-package com.example.voyagers
+package com.example.vestal
 
 import io.flutter.embedding.android.FlutterActivity
 

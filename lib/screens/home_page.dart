@@ -76,7 +76,7 @@ class _MyHomePageState extends State<MyHomePage> with SingleTickerProviderStateM
                     shape: BoxShape.circle,
                   ),
                   child: Image.asset(
-                    'assets/images/voyagersicon.png',
+                    'assets/images/vestalicon.png',
                   ),
                 ),
                 

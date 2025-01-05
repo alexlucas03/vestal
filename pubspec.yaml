@@ -1,4 +1,4 @@
-name: voyagers
+name: vestal
 description: A new Flutter project.
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
@@ -102,10 +102,10 @@ flutter:
 flutter_icons:
   android: "launcher_icon"
   ios: true
-  image_path: "assets/voyagersicon.png"
+  image_path: "assets/vestalicon.png"
   min_sdk_android: 21
   adaptive_icon_background: "#000000"
-  adaptive_icon_foreground: "assets/voyagersicon.png"
+  adaptive_icon_foreground: "assets/vestalicon.png"
   # Add these lines:
   adaptive_icon_mask: true
   remove_alpha_ios: true

@@ -531,7 +531,7 @@ class DatabaseHelper {
   Future<Connection> openConnection() async {
     final conn = await Connection.open(Endpoint(
           host: 'ep-yellow-truth-a5ebo559.us-east-2.aws.neon.tech',
-          database: 'voyagersdb',
+          database: 'vestaldb',
           username: 'voyageruser',
           password: 'Sk3l3ton!sk3l3ton',
         ));

@@ -49,7 +49,7 @@ class MyApp extends StatelessWidget {
         ),
       ),
       home: isMoodSubmittedToday 
-          ? const MyHomePage(title: 'Voyagers') 
+          ? const MyHomePage(title: 'vestal') 
           : const MoodSliderPage(fromPage: 'None'),
     );
   }

@@ -1,4 +1,4 @@
-# voyagers
+# vestal
 
 A new Flutter project.
 

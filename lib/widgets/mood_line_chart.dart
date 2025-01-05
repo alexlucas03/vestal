@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:voyagers/database_helper.dart';
+import 'package:vestal/database_helper.dart';
 import 'chart_widgets/chart_display.dart';
 import 'chart_widgets/mood_statistics.dart';
 import 'chart_widgets/filter_buttons.dart';

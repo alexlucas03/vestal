@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:voyagers/screens/home_page.dart';
+import 'package:vestal/screens/home_page.dart';
 import '../database_helper.dart';
 
 class MoodSliderPage extends StatefulWidget {
@@ -113,7 +113,7 @@ class _MoodSliderPageState extends State<MoodSliderPage> with SingleTickerProvid
           Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (context) => MyHomePage(title: 'Voyagers'),
+              builder: (context) => MyHomePage(title: 'vestal'),
             ),
           );  // Navigate to homepage
         }
@@ -137,7 +137,7 @@ class _MoodSliderPageState extends State<MoodSliderPage> with SingleTickerProvid
         Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (context) => MyHomePage(title: 'Voyagers'),
+            builder: (context) => MyHomePage(title: 'vestal'),
           ),
         );  // Navigate to homepage
       }

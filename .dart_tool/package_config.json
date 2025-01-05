@@ -416,13 +416,13 @@
       "languageVersion": "3.4"
     },
     {
-      "name": "voyagers",
+      "name": "vestal",
       "rootUri": "../",
       "packageUri": "lib/",
       "languageVersion": "3.1"
     }
   ],
-  "generated": "2025-01-02T10:27:23.847201Z",
+  "generated": "2025-01-05T08:37:22.650140Z",
   "generator": "pub",
   "generatorVersion": "3.6.0",
   "flutterRoot": "file:///Users/betasw/flutter",
