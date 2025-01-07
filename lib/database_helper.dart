@@ -41,99 +41,34 @@ class DatabaseHelper {
   }
 
   Future _onCreate(Database db, int version) async {
-    await _createMoodsTable(db);
-    await _createUserDataTable(db);
-  }
-
-  Future _onUpgrade(Database db, int oldVersion, int newVersion) async {
-    if (oldVersion < 5) {
-      await db.execute('''
-        CREATE TABLE settings (
-          key TEXT PRIMARY KEY,
-          value TEXT NOT NULL
-        )
-      ''');
-    }
-    if (oldVersion < 6) {
-      await db.execute('''
-        CREATE TABLE moments (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          title TEXT,
-          date STRING,
-          status STRING,
-          description STRING,
-          feelings STRING,
-          ideal STRING,
-          intensity INTEGER
-        )
-      ''');
-    }
-
-    if (oldVersion < 9) {
-      await db.execute('''
-        DROP TABLE moments 
-      ''');
-      await db.execute('''
-        CREATE TABLE moments (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          title TEXT,
-          date TEXT,
-          status TEXT,
-          description TEXT,
-          feelings TEXT,
-          ideal TEXT,
-          intensity TEXT
-        )
-      ''');
-    }
-
-    if (oldVersion < 10) {
-      await db.execute('''
-        ALTER TABLE moments
-        ADD COLUMN type TEXT
-      ''');
-    }
-
-    if (oldVersion < 11) {
-      // We need to recreate the table to modify column constraints
-      await db.execute('ALTER TABLE moments RENAME TO moments_old');
-      
-      await db.execute('''
-        CREATE TABLE moments (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          title TEXT NOT NULL,
-          date TEXT NOT NULL,
-          status TEXT NOT NULL,
-          description TEXT DEFAULT NULL,
-          feelings TEXT DEFAULT NULL,
-          ideal TEXT DEFAULT NULL,
-          intensity TEXT DEFAULT NULL,
-          type TEXT NOT NULL DEFAULT 'good'
-        )
-      ''');
-
-      // Copy data from old table to new table
-      await db.execute('''
-        INSERT INTO moments (id, title, date, status, description, feelings, ideal, intensity, type)
-        SELECT id, title, date, status, description, feelings, ideal, intensity, type
-        FROM moments_old
-      ''');
-
-      // Drop the old table
-      await db.execute('DROP TABLE moments_old');
-    }
-
-    if (oldVersion < 12) {
-      await db.execute('''
-        ALTER TABLE moments
-        ADD COLUMN owner TEXT
-      ''');
-    }
-
-    if (oldVersion < 14) {
-    // Create a temporary table with the new schema
+    // Create moods table
     await db.execute('''
-      CREATE TABLE moments_temp (
+      CREATE TABLE IF NOT EXISTS moods (
+        rating INTEGER,
+        date STRING PRIMARY KEY
+      )
+    ''');
+
+    // Create user_data table
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS user_data (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_code TEXT,
+        partner_code TEXT
+      )
+    ''');
+
+    // Create settings table
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS settings (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL
+      )
+    ''');
+
+    // Create moments table with all required fields
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS moments (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         title TEXT NOT NULL,
         date TEXT NOT NULL,
@@ -147,102 +82,10 @@ class DatabaseHelper {
         shared INTEGER DEFAULT 0
       )
     ''');
-
-    // Copy data from old table to new table
-    await db.execute('''
-      INSERT INTO moments_temp 
-      SELECT id, title, date, status, description, feelings, ideal, intensity, type, owner, 0
-      FROM moments
-    ''');
-
-    // Drop old table
-    await db.execute('DROP TABLE moments');
-
-    // Rename temp table to moments
-    await db.execute('ALTER TABLE moments_temp RENAME TO moments');
   }
 
-  if (oldVersion < 15) {
-    // First check if the table has the correct schema
-    var tableInfo = await db.rawQuery('PRAGMA table_info(moments)');
-    bool hasSharedColumn = false;
-    String sharedColumnType = '';
+  Future _onUpgrade(Database db, int oldVersion, int newVersion) async {
     
-    for (var column in tableInfo) {
-      if (column['name'] == 'shared') {
-        hasSharedColumn = true;
-        sharedColumnType = column['type'].toString();
-        break;
-      }
-    }
-
-    // If shared column doesn't exist or is not INTEGER type
-    if (!hasSharedColumn || sharedColumnType != 'INTEGER') {
-      // Create temporary table with correct schema
-      await db.execute('''
-        CREATE TABLE moments_temp (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          title TEXT NOT NULL,
-          date TEXT NOT NULL,
-          status TEXT NOT NULL,
-          description TEXT DEFAULT NULL,
-          feelings TEXT DEFAULT NULL,
-          ideal TEXT DEFAULT NULL,
-          intensity TEXT DEFAULT NULL,
-          type TEXT NOT NULL DEFAULT 'good',
-          owner TEXT,
-          shared INTEGER DEFAULT 0
-        )
-      ''');
-
-      // Copy data, converting any existing shared values to INTEGER
-      await db.execute('''
-        INSERT INTO moments_temp 
-        SELECT 
-          id, 
-          title, 
-          date, 
-          status, 
-          description, 
-          feelings, 
-          ideal, 
-          intensity, 
-          type, 
-          owner,
-          CASE 
-            WHEN shared IS NULL THEN 0
-            WHEN shared = 1 OR shared = 'true' OR shared = 't' THEN 1
-            ELSE 0
-          END as shared
-        FROM moments
-      ''');
-
-      // Drop old table and rename new one
-      await db.execute('DROP TABLE moments');
-      await db.execute('ALTER TABLE moments_temp RENAME TO moments');
-    }
-  }
-  }
-
-  // Separate method for creating the moods table
-  Future _createMoodsTable(Database db) async {
-    await db.execute('''
-      CREATE TABLE IF NOT EXISTS moods (
-        rating INTEGER,
-        date STRING PRIMARY KEY
-      )
-    ''');
-  }
-
-  // New method for creating the user_data table
-  Future _createUserDataTable(Database db) async {
-    await db.execute('''
-      CREATE TABLE IF NOT EXISTS user_data (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        user_code TEXT,
-        partner_code TEXT 
-      )
-    ''');
   }
 
   // Method to store user code
@@ -342,14 +185,6 @@ class DatabaseHelper {
     Database db = await instance.db;
     await db.delete('user_data');
     return await db.delete('moods');
-  }
-
-  Future<void> deleteAndRecreateTable() async {
-    Database db = await instance.db;
-    await db.execute('DROP TABLE IF EXISTS moods');
-    await db.execute('DROP TABLE IF EXISTS user_data');
-    await _createMoodsTable(db);
-    await _createUserDataTable(db);
   }
 
   Future<void> close() async {
