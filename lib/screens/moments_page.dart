@@ -103,14 +103,21 @@ class _MomentsPageState extends State<MomentsPage> with SingleTickerProviderStat
     
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 8.0),
-      elevation: 4,
-      shadowColor: isArchived 
-          ? Colors.grey
-          : momentType.toLowerCase() == 'good' 
-              ? Colors.green
-              : momentType.toLowerCase() == 'bad'
-                  ? Colors.red
-                  : Colors.grey,
+      elevation: 0,  // Changed to 0 since we're using border
+      color: Colors.white,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(4.0),
+        side: BorderSide(
+          color: isArchived 
+              ? Colors.grey
+              : momentType.toLowerCase() == 'good' 
+                  ? Colors.green
+                  : momentType.toLowerCase() == 'bad'
+                      ? Colors.red
+                      : Colors.grey,
+          width: 2.0,
+        ),
+      ),
       child: InkWell(
         onTap: () => _navigateToAddMoment(moment),
         child: Padding(
@@ -190,8 +197,15 @@ class _MomentsPageState extends State<MomentsPage> with SingleTickerProviderStat
                       if (_archivedMoments.isNotEmpty) ...[
                         Card(
                           margin: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 8.0),
-                          elevation: 4,
-                          shadowColor: Colors.grey,
+                          elevation: 0,
+                          color: Colors.white,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(4.0),
+                            side: const BorderSide(
+                              color: Colors.grey,
+                              width: 2.0,
+                            ),
+                          ),
                           child: InkWell(
                             onTap: () {
                               setState(() {
