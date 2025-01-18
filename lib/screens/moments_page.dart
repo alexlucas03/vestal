@@ -3,6 +3,8 @@ import 'package:intl/intl.dart';
 import 'package:vestal/screens/add_moment_page.dart';
 import '../database_helper.dart';
 import '../widgets/models/moment.dart';
+import '../utils/chart_colors.dart';
+
 
 class MomentsPage extends StatefulWidget {
   const MomentsPage({super.key});
@@ -19,6 +21,7 @@ class _MomentsPageState extends State<MomentsPage> with SingleTickerProviderStat
   bool _isLoading = true;
   bool _showArchive = false;
   String? _userCode;
+  bool isPinkPreference = false;
 
   @override
   void initState() {
@@ -40,6 +43,8 @@ class _MomentsPageState extends State<MomentsPage> with SingleTickerProviderStat
     try {
       _userCode = await DatabaseHelper.instance.getUserCode();
       List<Map<String, dynamic>> moments = await DatabaseHelper.instance.getAllMomentData();
+      // Add this line to load the color preference
+      bool pinkPref = await DatabaseHelper.instance.getColorPreference();
 
       if (mounted) {
         setState(() {
@@ -52,6 +57,7 @@ class _MomentsPageState extends State<MomentsPage> with SingleTickerProviderStat
             moment['type']?.toString().toLowerCase() == 'bad' && 
             moment['status']?.toString().toLowerCase() == 'closed').toList();
           
+          isPinkPreference = pinkPref;  // Add this line
           _isLoading = false;
         });
       }
@@ -62,7 +68,7 @@ class _MomentsPageState extends State<MomentsPage> with SingleTickerProviderStat
         });
       }
       print('Error loading moments: $e');
-      if (mounted && context != null) {
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Error loading moments: ${e.toString()}'),
@@ -132,8 +138,8 @@ class _MomentsPageState extends State<MomentsPage> with SingleTickerProviderStat
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
                     color: moment['owner']?.toString() == _userCode
-                        ? const Color(0xFF222D49)
-                        : Colors.pink,
+                        ? ChartColors.getUserColor(isPinkPreference)
+                        : ChartColors.getPartnerColor(isPinkPreference)
                   ),
                 ),
               ),
