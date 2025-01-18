@@ -375,147 +375,137 @@ class DatabaseHelper {
   
   Future<void> createPartnerTable(String partnerCode, String userCode, bool shareAll) async {
     try {
-      final conn = await openConnection();
-    // Moods
-      // Generate both possible table name combinations
-      String moodTableNameForward = '${partnerCode}_${userCode}_moods'.toLowerCase();
-      String moodTableNameReverse = '${userCode}_${partnerCode}_moods'.toLowerCase();
-      
-      // Check if either table exists
-      final existingTables = await conn.execute('''
-        SELECT tablename 
-        FROM pg_catalog.pg_tables 
-        WHERE tablename IN ('$moodTableNameForward', '$moodTableNameReverse')
-      ''');
-
-      String finalMoodTableName;
-      if (existingTables.isNotEmpty) {
-        // Use the existing table name if found
-        finalMoodTableName = existingTables[0][0] as String;
-      } else {
-        // If no table exists, use the forward arrangement
-        finalMoodTableName = moodTableNameForward;
+        final conn = await openConnection();
+        // Moods
+        // Generate both possible table name combinations
+        String moodTableNameForward = "${partnerCode}_${userCode}_moods".toLowerCase();
+        String moodTableNameReverse = "${userCode}_${partnerCode}_moods".toLowerCase();
         
-        // Create the new table with proper column definitions
-        await conn.execute('''
-          CREATE TABLE IF NOT EXISTS "$finalMoodTableName" (
-            date TEXT,
-            "${partnerCode.toLowerCase()}_mood" TEXT,
-            "${userCode.toLowerCase()}_mood" TEXT
-          )
-        ''');
-      }
-
-      // Clean up any other tables with this user code (except the one we're using)
-      await conn.execute('''
-        DO \$\$
-        DECLARE
-          _table text;
-        BEGIN
-          FOR _table IN 
-            SELECT tablename 
-            FROM pg_catalog.pg_tables 
-            WHERE tablename LIKE '%${userCode.toLowerCase()}%'
-            AND tablename LIKE '%moods%'
-            AND tablename != '$finalMoodTableName'
-          LOOP
-            EXECUTE 'DROP TABLE IF EXISTS ' || quote_ident(_table);
-          END LOOP;
-        END \$\$;
-      ''');
-
-      Database sqliteDb = await instance.db;
-      List<Map<String, dynamic>> localMoods = await sqliteDb.query('moods');
-
-      // For each mood in SQLite, sync with PostgreSQL
-      for (var mood in localMoods) {
-        String moodDate = mood['date'].toString();
-        String moodRating = mood['rating'].toString();
-
-        // Check if the date already exists in PostgreSQL
-        final existingRow = await conn.execute(
-          'SELECT * FROM "$finalMoodTableName" WHERE date = \'$moodDate\''
+        // Check if either table exists - Fixed quotes and syntax
+        final existingTables = await conn.execute(
+            "SELECT tablename FROM pg_catalog.pg_tables WHERE tablename = '$moodTableNameForward' OR tablename = '$moodTableNameReverse'"
         );
 
-        final today = DateTime.now();
-        final todayInt = int.parse('${today.year}${today.month.toString().padLeft(2, '0')}${today.day.toString().padLeft(2, '0')}');
-        final moodDateInt = int.parse(moodDate);
-
-        // Your condition
-        if (shareAll || moodDateInt >= todayInt) {
-          if (existingRow.isEmpty) {
-            // Insert new row if date doesn't exist
-            await conn.execute(
-              'INSERT INTO "$finalMoodTableName" (date, "${userCode.toLowerCase()}_mood") VALUES (\'$moodDate\', \'$moodRating\')'
-            );
-          } else {
-            // Update existing row with user's mood
-            await conn.execute(
-              'UPDATE "$finalMoodTableName" SET "${userCode.toLowerCase()}_mood" = \'$moodRating\' WHERE date = \'$moodDate\''
-            );
-          }
+        String finalMoodTableName;
+        if (existingTables.isNotEmpty) {
+            // Use the existing table name if found
+            finalMoodTableName = existingTables[0][0] as String;
+        } else {
+            // If no table exists, use the forward arrangement
+            finalMoodTableName = moodTableNameForward;
+            
+            // Create the new table with proper column definitions
+            await conn.execute('''
+                CREATE TABLE IF NOT EXISTS "$finalMoodTableName" (
+                    date TEXT,
+                    ${partnerCode.toLowerCase()}_mood TEXT,
+                    ${userCode.toLowerCase()}_mood TEXT
+                )
+            ''');
         }
-      }
-    // Moments
-      // Generate both possible table name combinations
-      String momentTableNameForward = '${partnerCode}_${userCode}_moments'.toLowerCase();
-      String momentTableNameReverse = '${userCode}_${partnerCode}_moments'.toLowerCase();
-      
-      // Check if either table exists
-      final existingMomentTables = await conn.execute('''
-        SELECT tablename 
-        FROM pg_catalog.pg_tables 
-        WHERE tablename IN ('$momentTableNameForward', '$momentTableNameReverse')
-      ''');
 
-      String finalMomentTableName;
-      if (existingMomentTables.isNotEmpty) {
-        // Use the existing table name if found
-        finalMomentTableName = existingMomentTables[0][0] as String;
-      } else {
-        // If no table exists, use the forward arrangement
-        finalMomentTableName = momentTableNameForward;
-        
-        // Create the new table with proper column definitions
+        // Clean up any other tables with this user code (fixed syntax)
         await conn.execute('''
-          CREATE TABLE IF NOT EXISTS "$finalMomentTableName" (
-            id SERIAL PRIMARY KEY,
-            title TEXT,
-            date TEXT,
-            status TEXT,
-            description TEXT,
-            feelings TEXT,
-            ideal TEXT,
-            intensity TEXT,
-            type TEXT,
-            owner TEXT,
-            shared BOOLEAN DEFAULT false
-          )
+            DO \$\$
+            DECLARE
+                _table text;
+            BEGIN
+                FOR _table IN 
+                    SELECT tablename 
+                    FROM pg_catalog.pg_tables 
+                    WHERE tablename LIKE '%${userCode.toLowerCase()}%'
+                    AND tablename LIKE '%moods%'
+                    AND tablename != '$finalMoodTableName'
+                LOOP
+                    EXECUTE 'DROP TABLE IF EXISTS ' || quote_ident(_table);
+                END LOOP;
+            END \$\$;
         ''');
-      }
 
-      // Clean up any other tables with this user code (except the one we're using)
-      await conn.execute('''
-        DO \$\$
-        DECLARE
-          _table text;
-        BEGIN
-          FOR _table IN 
-            SELECT tablename 
-            FROM pg_catalog.pg_tables 
-            WHERE tablename LIKE '%${userCode.toLowerCase()}%'
-            AND tablename LIKE '%moments%'
-            AND tablename != '$finalMomentTableName'
-          LOOP
-            EXECUTE 'DROP TABLE IF EXISTS ' || quote_ident(_table);
-          END LOOP;
-        END \$\$;
-      ''');
+        Database sqliteDb = await instance.db;
+        List<Map<String, dynamic>> localMoods = await sqliteDb.query('moods');
 
-      await conn.close();
+        // For each mood in SQLite, sync with PostgreSQL
+        for (var mood in localMoods) {
+            String moodDate = mood['date'].toString();
+            String moodRating = mood['rating'].toString();
+
+            // Check if the date already exists in PostgreSQL
+            final existingRow = await conn.execute(
+                'SELECT * FROM "$finalMoodTableName" WHERE date = \'$moodDate\''
+            );
+
+            final today = DateTime.now();
+            final todayInt = int.parse('${today.year}${today.month.toString().padLeft(2, '0')}${today.day.toString().padLeft(2, '0')}');
+            final moodDateInt = int.parse(moodDate);
+
+            if (shareAll || moodDateInt >= todayInt) {
+                if (existingRow.isEmpty) {
+                    // Insert new row if date doesn't exist
+                    await conn.execute(
+                        'INSERT INTO "$finalMoodTableName" (date, "${userCode.toLowerCase()}_mood") VALUES (\'$moodDate\', \'$moodRating\')'
+                    );
+                } else {
+                    // Update existing row with user's mood
+                    await conn.execute(
+                        'UPDATE "$finalMoodTableName" SET "${userCode.toLowerCase()}_mood" = \'$moodRating\' WHERE date = \'$moodDate\''
+                    );
+                }
+            }
+        }
+
+        // Moments table creation with fixed syntax
+        String momentTableNameForward = '${partnerCode}_${userCode}_moments'.toLowerCase();
+        String momentTableNameReverse = '${userCode}_${partnerCode}_moments'.toLowerCase();
+        
+        final existingMomentTables = await conn.execute(
+            "SELECT tablename FROM pg_catalog.pg_tables WHERE tablename = '$momentTableNameForward' OR tablename = '$momentTableNameReverse'"
+        );
+
+        String finalMomentTableName;
+        if (existingMomentTables.isNotEmpty) {
+            finalMomentTableName = existingMomentTables[0][0] as String;
+        } else {
+            finalMomentTableName = momentTableNameForward;
+            
+            await conn.execute('''
+                CREATE TABLE IF NOT EXISTS "$finalMomentTableName" (
+                    id SERIAL PRIMARY KEY,
+                    title TEXT,
+                    date TEXT,
+                    status TEXT,
+                    description TEXT,
+                    feelings TEXT,
+                    ideal TEXT,
+                    intensity TEXT,
+                    type TEXT,
+                    owner TEXT,
+                    shared BOOLEAN DEFAULT false
+                )
+            ''');
+        }
+
+        await conn.execute('''
+            DO \$\$
+            DECLARE
+                _table text;
+            BEGIN
+                FOR _table IN 
+                    SELECT tablename 
+                    FROM pg_catalog.pg_tables 
+                    WHERE tablename LIKE '%${userCode.toLowerCase()}%'
+                    AND tablename LIKE '%moments%'
+                    AND tablename != '$finalMomentTableName'
+                LOOP
+                    EXECUTE 'DROP TABLE IF EXISTS ' || quote_ident(_table);
+                END LOOP;
+            END \$\$;
+        ''');
+
+        await conn.close();
     } catch (e) {
-      print('Error in createPartnerTable: ${e.toString()}');
-      rethrow;
+        print('Error in createPartnerTable: ${e.toString()}');
+        rethrow;
     }
   }
 
@@ -559,152 +549,153 @@ class DatabaseHelper {
 
   Future<Map<String, List<Map<String, dynamic>>>> getAllMoodData() async {
     try {
-      // Get local moods
-      List<Map<String, dynamic>> userMoods = await queryAllMoods();
-      List<Map<String, dynamic>> partnerMoods = [];
-      
-      // Get partner code
-      String? partnerCode = await getPartnerCode();
-      String? userCode = await getUserCode();
-      
-      // If both codes exist, fetch partner data from PostgreSQL
-      if (partnerCode != null && userCode != null) {
-        try {
-          final conn = await openConnection();
-          
-          // Check which table exists
-          final existingTables = await conn.execute('''
-            SELECT tablename 
-            FROM pg_catalog.pg_tables 
-            WHERE tablename 
-            LIKE $partnerCode
-            AND $userCode
-            AND 'moods'
-          ''');
+        // Get local moods
+        List<Map<String, dynamic>> userMoods = await queryAllMoods();
+        List<Map<String, dynamic>> partnerMoods = [];
+        
+        // Get partner code
+        String? partnerCode = await getPartnerCode();
+        String? userCode = await getUserCode();
+        
+        // If both codes exist, fetch partner data from PostgreSQL
+        if (partnerCode != null && userCode != null) {
+            try {
+                final conn = await openConnection();
+                
+                // Generate both possible table name combinations
+                String moodTableNameForward = '${partnerCode}_${userCode}_moods'.toLowerCase();
+                String moodTableNameReverse = '${userCode}_${partnerCode}_moods'.toLowerCase();
+                
+                // Check which table exists using proper IN clause
+                final existingTables = await conn.execute('''
+                SELECT tablename 
+                FROM pg_catalog.pg_tables 
+                WHERE tablename IN ('$moodTableNameForward', '$moodTableNameReverse')
+                ''');
 
-          if (existingTables.isNotEmpty) {
-            String moodTableName = existingTables[0][0] as String;
-            
-            // Determine which column contains partner's mood based on table name
-            String partnerMoodColumn = '${partnerCode.toLowerCase()}_mood';
+                if (existingTables.isNotEmpty) {
+                    String moodTableName = existingTables[0][0] as String;
+                    
+                    // Determine which column contains partner's mood based on table name
+                    String partnerMoodColumn = '"${partnerCode.toLowerCase()}_mood"';
 
-            // Fetch partner's mood data
-            final results = await conn.execute(
-              'SELECT date, $partnerMoodColumn as rating FROM "$moodTableName" WHERE $partnerMoodColumn IS NOT NULL'
-            );
+                    // Fetch partner's mood data
+                    final results = await conn.execute(
+                        'SELECT date, $partnerMoodColumn as rating FROM "$moodTableName" WHERE $partnerMoodColumn IS NOT NULL'
+                    );
 
-            // Convert results to the same format as user moods
-            for (final row in results) {
-              partnerMoods.add({
-                'date': row[0],
-                'rating': int.parse(row[1] as String),
-              });
+                    // Convert results to the same format as user moods
+                    for (final row in results) {
+                        partnerMoods.add({
+                        'date': row[0],
+                        'rating': int.parse(row[1] as String),
+                        });
+                    }
+                }
+                
+                await conn.close();
+            } catch (e) {
+                print('Error fetching partner mood data: $e');
+                // Don't rethrow - we'll just return empty partner moods
             }
-          }
-          
-          await conn.close();
-        } catch (e) {
-          print('Error fetching partner mood data: $e');
-          // Don't rethrow - we'll just return empty partner moods
         }
-      }
 
-      return {
+        return {
         'userMoods': userMoods,
         'partnerMoods': partnerMoods,
-      };
+        };
     } catch (e) {
-      print('Error in getAllMoodData: $e');
-      rethrow;
+        print('Error in getAllMoodData: $e');
+        rethrow;
     }
-  }
+    }
 
-  Future<List<Map<String, dynamic>>> getAllMomentData() async {
-  try {
-    List<Map<String, dynamic>> userMoments = await queryAllMoments();
-    List<Map<String, dynamic>> partnerMoments = [];
-    
-    String? partnerCode = await getPartnerCode();
-    String? userCode = await getUserCode();
-    
-    print('DEBUG: User Code = $userCode');
-    print('DEBUG: Partner Code = $partnerCode');
-    
-    if (partnerCode != null && userCode != null) {
-      try {
-        final conn = await openConnection();
-
-        // Generate both possible table name combinations
-        String momentTableNameForward = '${partnerCode}_${userCode}_moments'.toLowerCase();
-        String momentTableNameReverse = '${userCode}_${partnerCode}_moments'.toLowerCase();
+    Future<List<Map<String, dynamic>>> getAllMomentData() async {
+    try {
+        List<Map<String, dynamic>> userMoments = await queryAllMoments();
+        List<Map<String, dynamic>> partnerMoments = [];
         
-        final existingTables = await conn.execute('''
-          SELECT tablename 
-          FROM pg_catalog.pg_tables 
-          WHERE tablename IN ('$momentTableNameForward', '$momentTableNameReverse')
-        ''');
+        String? partnerCode = await getPartnerCode();
+        String? userCode = await getUserCode();
+        
+        print('DEBUG: User Code = $userCode');
+        print('DEBUG: Partner Code = $partnerCode');
+        
+        if (partnerCode != null && userCode != null) {
+            try {
+                final conn = await openConnection();
 
-        if (existingTables.isNotEmpty) {
-          String momentTableName = existingTables[0][0] as String;
-          print('DEBUG: Using table: $momentTableName');
+                // Generate both possible table name combinations
+                String momentTableNameForward = '${partnerCode}_${userCode}_moments'.toLowerCase();
+                String momentTableNameReverse = '${userCode}_${partnerCode}_moments'.toLowerCase();
+                
+                final existingTables = await conn.execute('''
+                SELECT tablename 
+                FROM pg_catalog.pg_tables 
+                WHERE tablename IN ('$momentTableNameForward', '$momentTableNameReverse')
+                ''');
 
-          final results = await conn.execute('''
-            SELECT * FROM "$momentTableName" 
-            WHERE owner = '${partnerCode.toUpperCase()}'
-          ''');
+                if (existingTables.isNotEmpty) {
+                String momentTableName = existingTables[0][0] as String;
+                print('DEBUG: Using table: $momentTableName');
 
-          print('DEBUG: Found ${results.length} partner moments');
+                final results = await conn.execute('''
+                    SELECT * FROM "$momentTableName" 
+                    WHERE owner = '${partnerCode.toUpperCase()}'
+                ''');
 
-          for (final row in results) {
-            // Ensure all values are properly converted to strings
-            Map<String, dynamic> moment = {
-              'title': row[1]?.toString() ?? '',
-              'date': row[2]?.toString() ?? '',
-              'status': row[3]?.toString() ?? '',
-              'description': row[4]?.toString() ?? '',
-              'feelings': row[5]?.toString() ?? '',
-              'ideal': row[6]?.toString() ?? '',
-              'intensity': row[7]?.toString() ?? '',
-              'type': row[8]?.toString() ?? '',
-              'owner': row[9]?.toString() ?? '',
-              'shared': true
-            };
-            
-            // Only add moment if it has a valid date
-            if (moment['date']?.isNotEmpty == true && 
-                int.tryParse(moment['date'].toString()) != null) {
-              partnerMoments.add(moment);
+                print('DEBUG: Found ${results.length} partner moments');
+
+                for (final row in results) {
+                    // Ensure all values are properly converted to strings
+                    Map<String, dynamic> moment = {
+                    'title': row[1]?.toString() ?? '',
+                    'date': row[2]?.toString() ?? '',
+                    'status': row[3]?.toString() ?? '',
+                    'description': row[4]?.toString() ?? '',
+                    'feelings': row[5]?.toString() ?? '',
+                    'ideal': row[6]?.toString() ?? '',
+                    'intensity': row[7]?.toString() ?? '',
+                    'type': row[8]?.toString() ?? '',
+                    'owner': row[9]?.toString() ?? '',
+                    'shared': true
+                    };
+                    
+                    // Only add moment if it has a valid date
+                    if (moment['date']?.isNotEmpty == true && 
+                        int.tryParse(moment['date'].toString()) != null) {
+                    partnerMoments.add(moment);
+                    }
+                }
+                }
+                
+                await conn.close();
+            } catch (e) {
+                print('Error fetching partner moment data: $e');
             }
-          }
+            }
+
+            // Combine and sort lists, safely handling invalid dates
+            var combinedMoments = [...userMoments, ...partnerMoments];
+            combinedMoments.sort((a, b) {
+            // Safely parse dates with null handling
+            int? dateA = int.tryParse(a['date']?.toString() ?? '');
+            int? dateB = int.tryParse(b['date']?.toString() ?? '');
+            
+            if (dateA == null && dateB == null) return 0;
+            if (dateA == null) return 1;
+            if (dateB == null) return -1;
+            
+            return dateB.compareTo(dateA);
+            });
+
+            return combinedMoments;
+
+        } catch (e) {
+            print('Error in getAllMomentData: $e');
+            rethrow;
         }
-        
-        await conn.close();
-      } catch (e) {
-        print('Error fetching partner moment data: $e');
-      }
     }
-
-    // Combine and sort lists, safely handling invalid dates
-    var combinedMoments = [...userMoments, ...partnerMoments];
-    combinedMoments.sort((a, b) {
-      // Safely parse dates with null handling
-      int? dateA = int.tryParse(a['date']?.toString() ?? '');
-      int? dateB = int.tryParse(b['date']?.toString() ?? '');
-      
-      if (dateA == null && dateB == null) return 0;
-      if (dateA == null) return 1;
-      if (dateB == null) return -1;
-      
-      return dateB.compareTo(dateA);
-    });
-
-    return combinedMoments;
-
-  } catch (e) {
-    print('Error in getAllMomentData: $e');
-    rethrow;
-  }
-}
 
   Future<void> cloudAddMoment(Moment moment, String userCode) async {
     final conn = await openConnection();
