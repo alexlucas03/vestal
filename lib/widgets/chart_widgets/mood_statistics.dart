@@ -1,4 +1,3 @@
-// chart_widgets/mood_statistics.dart
 import 'package:flutter/material.dart';
 import '../models/chart_data.dart';
 import '../../utils/chart_colors.dart';
