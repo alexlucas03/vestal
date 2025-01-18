@@ -35,6 +35,8 @@ class ChartDisplay extends StatelessWidget {
           // Add these properties to disable animations
           lineTouchData: LineTouchData(enabled: true),
           showingTooltipIndicators: [],
+          baselineY: 0, // Add this to ensure grid lines are drawn from baseline
+          clipData: FlClipData.all(), // Add this to ensure grid lines are clipped properly
         ),
         duration: Duration.zero, // Disable the animation duration
         curve: Curves.linear, // Use linear curve for instant transition
@@ -48,6 +50,7 @@ class ChartDisplay extends StatelessWidget {
       drawHorizontalLine: true,
       drawVerticalLine: false,
       horizontalInterval: 2,
+      checkToShowHorizontalLine: (value) => true, // Always show horizontal lines
       getDrawingHorizontalLine: (value) {
         return FlLine(
           color: Colors.grey,
@@ -179,6 +182,16 @@ class ChartDisplay extends StatelessWidget {
           barWidth: 3,
           dotData: FlDotData(show: true),
           belowBarData: BarAreaData(show: false),
+        ),
+      );
+    }
+
+    // Add an empty bar to ensure grid lines are shown even when no data is visible
+    if (bars.isEmpty) {
+      bars.add(
+        LineChartBarData(
+          spots: [],
+          show: false,
         ),
       );
     }
