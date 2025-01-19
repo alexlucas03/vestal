@@ -128,6 +128,18 @@
       "languageVersion": "3.3"
     },
     {
+      "name": "http",
+      "rootUri": "file:///Users/betasw/.pub-cache/hosted/pub.dev/http-1.2.2",
+      "packageUri": "lib/",
+      "languageVersion": "3.3"
+    },
+    {
+      "name": "http_parser",
+      "rootUri": "file:///Users/betasw/.pub-cache/hosted/pub.dev/http_parser-4.1.2",
+      "packageUri": "lib/",
+      "languageVersion": "3.4"
+    },
+    {
       "name": "image",
       "rootUri": "file:///Users/betasw/.pub-cache/hosted/pub.dev/image-4.5.2",
       "packageUri": "lib/",
@@ -184,6 +196,12 @@
     {
       "name": "meta",
       "rootUri": "file:///Users/betasw/.pub-cache/hosted/pub.dev/meta-1.15.0",
+      "packageUri": "lib/",
+      "languageVersion": "2.12"
+    },
+    {
+      "name": "onesignal_flutter",
+      "rootUri": "file:///Users/betasw/.pub-cache/hosted/pub.dev/onesignal_flutter-5.2.9",
       "packageUri": "lib/",
       "languageVersion": "2.12"
     },
@@ -422,7 +440,7 @@
       "languageVersion": "3.1"
     }
   ],
-  "generated": "2025-01-05T08:37:22.650140Z",
+  "generated": "2025-01-19T08:45:44.649361Z",
   "generator": "pub",
   "generatorVersion": "3.6.0",
   "flutterRoot": "file:///Users/betasw/flutter",

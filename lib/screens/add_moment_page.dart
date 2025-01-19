@@ -155,14 +155,14 @@ class _AddMomentPageState extends State<AddMomentPage> {
         if (widget.moment != null) {
           // Update existing moment
           await DatabaseHelper.instance.updateMoment(
-            widget.moment!.id!,
+            widget.moment!.id,  // This might be null for partner moments
             _titleController.text,
             _status.toLowerCase(),
             _descriptionController.text,
             _feelingsController.text,
             _idealController.text,
             _intensity?.toString() ?? '',
-            widget.moment!.owner!,
+            widget.moment!.owner ?? '',
             _isShared
           );
         } else {
@@ -184,12 +184,14 @@ class _AddMomentPageState extends State<AddMomentPage> {
           Navigator.pop(context, true);
         }
       } catch (e) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(e.toString()),
-            backgroundColor: Colors.red,
-          ),
-        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(e.toString()),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
       }
     }
   }
@@ -298,6 +300,7 @@ class _AddMomentPageState extends State<AddMomentPage> {
                 children: [
                   TextFormField(
                     controller: _titleController,
+                    enabled: widget.moment == null,
                     decoration: const InputDecoration(
                       labelText: 'Title*',
                       border: OutlineInputBorder(),

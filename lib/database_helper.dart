@@ -6,6 +6,8 @@ import 'mood.dart';
 import 'dart:io';
 import 'package:postgres/postgres.dart';
 import '/widgets/models/moment.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
 
 class DatabaseHelper {
   static final DatabaseHelper instance = DatabaseHelper._instance();
@@ -34,7 +36,7 @@ class DatabaseHelper {
     // Open database with onUpgrade callback
     return await openDatabase(
       path,
-      version: 15, // Increased version number for new table
+      version: 16,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
@@ -55,6 +57,7 @@ class DatabaseHelper {
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         user_code TEXT,
         partner_code TEXT
+        player_id TEXT
       )
     ''');
 
@@ -85,7 +88,12 @@ class DatabaseHelper {
   }
 
   Future _onUpgrade(Database db, int oldVersion, int newVersion) async {
+    var columns = await db.rawQuery('PRAGMA table_info(user_data)');
+    bool playerIdExists = columns.any((column) => column['name'] == 'player_id');
     
+    if (!playerIdExists) {
+      await db.execute('ALTER TABLE user_data ADD COLUMN player_id TEXT');
+    }
   }
 
   // Method to store user code
@@ -183,6 +191,13 @@ class DatabaseHelper {
 
   Future<int> clearDb() async {
     Database db = await instance.db;
+    
+    await db.update(
+      'user_data',
+      {'player_id': null},
+      where: 'id > 0'
+    );
+    
     await db.delete('user_data');
     return await db.delete('moods');
   }
@@ -269,7 +284,7 @@ class DatabaseHelper {
   }
 
   Future<void> updateMoment(
-    int id,
+    int? id,
     String title, 
     String status,
     String description,
@@ -279,52 +294,107 @@ class DatabaseHelper {
     String owner,
     bool isShared
   ) async {
-    if (owner == await getUserCode()) {
-      Database db = await instance.db;
-      await db.update(
-        'moments',
-        {
-          'title': title,
-          'status': status,
-          'description': description.isEmpty ? null : description,
-          'feelings': feelings.isEmpty ? null : feelings,
-          'ideal': ideal.isEmpty ? null : ideal,
-          'intensity': intensity.isEmpty ? null : intensity,
-        },
-        where: 'id = ?',
-        whereArgs: [id],
-      );
-    }
+    String? currentUserCode = await getUserCode();
+    
+    try {
+      // Only attempt local database update if:
+      // 1. The moment is owned by current user
+      // 2. The moment has a local ID
+      if (owner == currentUserCode && id != null) {
+        Database db = await instance.db;
+        await db.update(
+          'moments',
+          {
+            'title': title,
+            'status': status,
+            'description': description.isEmpty ? null : description,
+            'feelings': feelings.isEmpty ? null : feelings,
+            'ideal': ideal.isEmpty ? null : ideal,
+            'intensity': intensity.isEmpty ? null : intensity,
+          },
+          where: 'id = ?',
+          whereArgs: [id],
+        );
+      }
 
-    if (isShared) {
+      // Update in cloud database
       final conn = await openConnection();
-
-      final existingTables = await conn.execute('''
+      String? partnerCode = await getPartnerCode();
+      
+      if (partnerCode != null && currentUserCode != null) {
+        // Generate both possible table name combinations
+        String momentTableNameForward = '${partnerCode}_${currentUserCode}_moments'.toLowerCase();
+        String momentTableNameReverse = '${currentUserCode}_${partnerCode}_moments'.toLowerCase();
+        
+        final existingTables = await conn.execute('''
           SELECT tablename 
           FROM pg_catalog.pg_tables 
-          WHERE tablename LIKE '${await getPartnerCode()}' AND '${await getUserCode()}' and 'moments'
+          WHERE tablename IN ('$momentTableNameForward', '$momentTableNameReverse')
         ''');
 
         if (existingTables.isNotEmpty) {
           String momentTableName = existingTables[0][0] as String;
-
-          await conn.execute('''
-            UPDATE $momentTableName 
-            SET 
-              title = $title,
-              status = $status,
-              description = $description 
-              feelings = $feelings 
-              ideal = $ideal 
-              intensity = $intensity 
-            WHERE 
-              title = '$title'
-              AND OWNER = $owner
+          
+          // First check if the moment exists and get its date
+          final existingMomentResults = await conn.execute('''
+            SELECT date FROM "$momentTableName" 
+            WHERE title = '${title.replaceAll("'", "''")}' 
+            AND owner = '${owner.toUpperCase()}'
           ''');
 
+          if (existingMomentResults.isNotEmpty) {
+            // Update existing moment
+            await conn.execute('''
+              UPDATE "$momentTableName" 
+              SET 
+                status = '${status.replaceAll("'", "''")}',
+                description = '${description.replaceAll("'", "''")}',
+                feelings = '${feelings.replaceAll("'", "''")}',
+                ideal = '${ideal.replaceAll("'", "''")}',
+                intensity = '${intensity.replaceAll("'", "''")}'
+              WHERE 
+                title = '${title.replaceAll("'", "''")}' 
+                AND owner = '${owner.toUpperCase()}'
+            ''');
+
+            print('DEBUG: Updated moment in cloud for owner: ${owner.toUpperCase()}');
+          } else {
+            // Get the original moment's date from the table
+            final dateResults = await conn.execute('''
+              SELECT date FROM "$momentTableName" 
+              WHERE title = '${title.replaceAll("'", "''")}'
+            ''');
+            
+            String dateStr = dateResults.isNotEmpty ? 
+                dateResults[0][0].toString() : 
+                '${DateTime.now().year}${DateTime.now().month.toString().padLeft(2, '0')}${DateTime.now().day.toString().padLeft(2, '0')}';
+
+            // Insert new moment if it doesn't exist
+            await conn.execute('''
+              INSERT INTO "$momentTableName" 
+              (title, date, status, description, feelings, ideal, intensity, type, owner, shared)
+              VALUES (
+                '${title.replaceAll("'", "''")}',
+                '$dateStr',
+                '${status.replaceAll("'", "''")}',
+                '${description.replaceAll("'", "''")}',
+                '${feelings.replaceAll("'", "''")}',
+                '${ideal.replaceAll("'", "''")}',
+                '${intensity.replaceAll("'", "''")}',
+                'bad',
+                '${owner.toUpperCase()}',
+                ${isShared}
+              )
+            ''');
+
+            print('DEBUG: Inserted new moment in cloud for owner: ${owner.toUpperCase()} with date: $dateStr');
+          }
         }
-        
-        await conn.close();
+      }
+      await conn.close();
+    } catch (e) {
+      print('Error in updateMoment: $e');
+      rethrow;
     }
   }
 
@@ -701,7 +771,6 @@ class DatabaseHelper {
     final conn = await openConnection();
 
     try {
-      // Find tables matching the user code
       final momentTableResult = await conn.execute(
         'SELECT tablename FROM pg_catalog.pg_tables WHERE tablename LIKE \'%${userCode.toLowerCase()}%\' AND tablename LIKE \'%moments%\''
       );
@@ -709,7 +778,7 @@ class DatabaseHelper {
       if (momentTableResult.isNotEmpty) {
         final momentTableName = momentTableResult[0][0] as String;
 
-        // Properly escape strings and handle potential null values
+        // Your existing database operations...
         final results = await conn.execute(
           'SELECT * FROM "$momentTableName"'
         );
@@ -743,6 +812,36 @@ class DatabaseHelper {
             WHERE title = '${moment.title}'
             AND owner = '${moment.owner}'
           ''');
+        }
+
+        // Send notification if moment is shared
+        if (moment.shared) {
+          String? partnerPlayerId = await getPartnerPlayerId();
+          
+          if (partnerPlayerId != null) {
+            final response = await http.post(
+              Uri.parse('https://onesignal.com/api/v1/notifications'),
+              headers: {
+                'Content-Type': 'application/json; charset=utf-8',
+                'Authorization': 'Basic 7wagzl4rvupu5lgqcjpdgocd2'
+              },
+              body: jsonEncode({
+                'app_id': '839fe5c4-93ca-4620-bf4b-adc6cfdf80e0',
+                'include_player_ids': [partnerPlayerId],
+                'headings': {'en': 'New Moment Shared'},
+                'contents': {'en': '${moment.title} has been shared with you'},
+                'data': {
+                  'moment_title': moment.title,
+                  'moment_date': moment.date,
+                  'moment_type': moment.type
+                }
+              }),
+            );
+
+            if (response.statusCode != 200) {
+              print('Failed to send notification: ${response.body}');
+            }
+          }
         }
       }
       await conn.close();
@@ -911,4 +1010,67 @@ class DatabaseHelper {
     
     return fieldsToCompare.any((field) => local[field] != cloud[field]);
   }
+
+  Future<void> storeOneSignalPlayerId(String playerId) async {
+    Database db = await instance.db;
+    
+    List<Map<String, dynamic>> existing = await db.query('user_data');
+    if (existing.isEmpty) {
+      await db.insert('user_data', {'player_id': playerId});
+    } else {
+      await db.update(
+        'user_data',
+        {'player_id': playerId},
+        where: 'id = ?',
+        whereArgs: [existing.first['id']],
+      );
+    }
+
+    final conn = await openConnection();
+    try {
+      await conn.execute('''
+        CREATE TABLE IF NOT EXISTS onesignal_players (
+          user_code TEXT PRIMARY KEY,
+          player_id TEXT NOT NULL,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      ''');
+
+      String? userCode = await getUserCode();
+      if (userCode != null) {
+        await conn.execute('''
+          INSERT INTO onesignal_players (user_code, player_id, updated_at)
+          VALUES ('${userCode.toUpperCase()}', '$playerId', CURRENT_TIMESTAMP)
+          ON CONFLICT (user_code)
+          DO UPDATE SET 
+            player_id = EXCLUDED.player_id,
+            updated_at = CURRENT_TIMESTAMP
+        ''');
+      }
+    } finally {
+      await conn.close();
+    }
+  }
+
+  Future<String?> getPartnerPlayerId() async {
+    String? partnerCode = await getPartnerCode();
+    if (partnerCode == null) return null;
+
+    final conn = await openConnection();
+    try {
+      final result = await conn.execute('''
+        SELECT player_id 
+        FROM onesignal_players 
+        WHERE user_code = '${partnerCode.toUpperCase()}'
+      ''');
+      
+      if (result.isNotEmpty) {
+        return result[0][0] as String;
+      }
+      return null;
+    } finally {
+      await conn.close();
+    }
+  }
 }
+
